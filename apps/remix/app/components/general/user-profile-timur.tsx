@@ -17,22 +17,22 @@ export const UserProfileTimur = ({ className, rows = 2 }: UserProfileTimurProps)
   return (
     <div className={cn('flex flex-col items-center rounded-xl bg-neutral-100 p-4 dark:bg-background', className)}>
       <div className="inline-block max-w-full truncate rounded-md border border-border bg-background px-2.5 py-1.5 text-muted-foreground text-sm">
-        {baseUrl.host}/u/timur
+        {baseUrl.host}/u/jean
       </div>
 
       <div className="mt-4">
-        <img src={timurImage} className="h-20 w-20 rounded-full" alt="image of timur ercan founder of documenso" />
+        <img src={timurImage} className="h-20 w-20 rounded-full" alt="image of Jean-Emmanuel Losi" />
       </div>
 
       <div className="mt-6">
         <div className="flex items-center justify-center gap-x-2">
-          <h2 className="font-semibold text-2xl">Timur Ercan</h2>
+          <h2 className="font-semibold text-2xl">Jean-Emmanuel Losi</h2>
 
           <VerifiedIcon className="h-8 w-8 text-primary" />
         </div>
 
         <p className="mt-4 max-w-[40ch] text-center text-muted-foreground text-sm">
-          <Trans>Hey I’m Timur</Trans>
+          <Trans>Hey I'm Jean-Emmanuel</Trans>
         </p>
 
         <p className="mt-1 max-w-[40ch] text-center text-muted-foreground text-sm">

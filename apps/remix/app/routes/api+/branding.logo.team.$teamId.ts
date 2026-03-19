@@ -1,5 +1,6 @@
 import { getTeamSettings } from '@documenso/lib/server-only/team/get-team-settings';
 import { sha256 } from '@documenso/lib/universal/crypto';
+import type { GetFileOptions } from '@documenso/lib/universal/upload/get-file.server';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
 import { loadLogo } from '@documenso/lib/utils/images/logo';
 
@@ -56,9 +57,15 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     });
   }
 
-  const file = await getFileServerSide(JSON.parse(settings.brandingLogo)).catch((e) => {
-    console.error(e);
-  });
+  let parsedLogo: unknown;
+
+  try {
+    parsedLogo = JSON.parse(settings.brandingLogo);
+  } catch (_e) {
+    return Response.json({ status: 'error', message: 'Invalid logo data' }, { status: 500 });
+  }
+
+  const file = await getFileServerSide(parsedLogo as GetFileOptions).catch(() => undefined);
 
   if (!file) {
     return Response.json(

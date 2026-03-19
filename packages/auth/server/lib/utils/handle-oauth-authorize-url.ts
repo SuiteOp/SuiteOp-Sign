@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import { setCookie } from 'hono/cookie';
 
 import type { OAuthClientOptions } from '../../config';
-import { sessionCookieOptions } from '../session/session-cookies';
+import { getSessionCookieOptions } from '../session/session-cookies';
 import { getOpenIdConfiguration } from './open-id';
 
 type HandleOAuthAuthorizeUrlOptions = {
@@ -71,20 +71,20 @@ export const handleOAuthAuthorizeUrl = async (options: HandleOAuthAuthorizeUrlOp
   url.searchParams.set('prompt', prompt);
 
   setCookie(c, `${clientOptions.id}_oauth_state`, state, {
-    ...sessionCookieOptions,
+    ...getSessionCookieOptions(),
     sameSite: 'lax',
     maxAge: oauthCookieMaxAge,
   });
 
   setCookie(c, `${clientOptions.id}_code_verifier`, codeVerifier, {
-    ...sessionCookieOptions,
+    ...getSessionCookieOptions(),
     sameSite: 'lax',
     maxAge: oauthCookieMaxAge,
   });
 
   if (redirectPath) {
     setCookie(c, `${clientOptions.id}_redirect_path`, `${state} ${redirectPath}`, {
-      ...sessionCookieOptions,
+      ...getSessionCookieOptions(),
       sameSite: 'lax',
       maxAge: oauthCookieMaxAge,
     });

@@ -65,6 +65,7 @@ export default function EmbeddingAuthoringDocumentCreatePage() {
           arrayBuffer: async () => Promise.resolve(configuration.documentData!.data.buffer),
           name: configuration.documentData.name,
           type: configuration.documentData.type,
+          size: configuration.documentData.data.byteLength,
         },
         { presignToken },
       );

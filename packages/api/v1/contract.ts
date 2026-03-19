@@ -35,6 +35,9 @@ import {
   ZSuccessfulResendDocumentResponseSchema,
   ZSuccessfulResponseSchema,
   ZSuccessfulSigningResponseSchema,
+  ZSuiteOpGetCodeRequestSchema,
+  ZSuiteOpGetCodeResponseSchema,
+  ZSuiteOpGetInfoResponseSchema,
   ZUnsuccessfulResponseSchema,
   ZUpdateFieldMutationSchema,
   ZUpdateRecipientMutationSchema,
@@ -327,6 +330,29 @@ export const ApiContractV1 = c.router(
       summary: 'Delete a field from a document',
       deprecated: true,
       description: deprecatedDescription,
+    },
+
+    getSuiteOpCode: {
+      method: 'POST',
+      path: '/api/v1/oauth/suiteop/code',
+      body: ZSuiteOpGetCodeRequestSchema,
+      responses: {
+        200: ZSuiteOpGetCodeResponseSchema,
+        400: ZUnsuccessfulResponseSchema,
+        401: ZUnsuccessfulResponseSchema,
+        404: ZUnsuccessfulResponseSchema,
+      },
+      summary: 'Get API token using claim code (SuiteOp only)',
+    },
+
+    getSuiteOpInfo: {
+      method: 'GET',
+      path: '/api/v1/oauth/suiteop/info',
+      responses: {
+        200: ZSuiteOpGetInfoResponseSchema,
+        401: ZUnsuccessfulResponseSchema,
+      },
+      summary: 'Get team info for API token (validates token)',
     },
   },
   {
