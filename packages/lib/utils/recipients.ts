@@ -1,6 +1,6 @@
 import { isSignatureFieldType } from '@documenso/prisma/guards/is-signature-field';
 import type { Envelope } from '@prisma/client';
-import { type Field, RecipientRole, SigningStatus } from '@prisma/client';
+import { type Field, ReadStatus, RecipientRole, SigningStatus } from '@prisma/client';
 
 import { NEXT_PUBLIC_WEBAPP_URL } from '../constants/app';
 import { AppError, AppErrorCode } from '../errors/app-error';
@@ -55,13 +55,13 @@ export const canRecipientBeModified = (
     return true;
   }
 
-  // Deny if the recipient has already signed the document.
+  // Deny if the recipient has actually interacted with the document
+  // (opened it or signed it), not just because a field was pre-filled.
   if (recipient.signingStatus === SigningStatus.SIGNED) {
     return false;
   }
 
-  // Deny if the recipient has inserted any fields.
-  if (fields.some((field) => field.recipientId === recipient.id && field.inserted)) {
+  if (recipient.readStatus !== ReadStatus.NOT_OPENED) {
     return false;
   }
 
