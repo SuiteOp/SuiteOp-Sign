@@ -8,13 +8,13 @@ export type RevokeAuthorizationOptions = {
 
 /**
  * Revokes SuiteOp integration for a team:
- * 1. Deletes all API tokens named "SuiteOp Integration" for the team
- * 2. Deletes all webhooks pointing to the SuiteOp hookdeck URL for the team
- * 3. Marks all SuiteOp authorizations for the team as revoked
+ * 1. Finds all API tokens named "SuiteOp Integration" for the team
+ * 2. Deletes them and their associated webhooks
  *
  * Authenticated via master key (same as claim-authorization).
  */
 export const revokeAuthorization = async ({ teamId }: RevokeAuthorizationOptions) => {
+  // Verify team exists
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     select: { id: true, name: true },
@@ -26,38 +26,39 @@ export const revokeAuthorization = async ({ teamId }: RevokeAuthorizationOptions
     });
   }
 
-  // Delete all SuiteOp Integration API tokens for this team
-  const deletedTokens = await prisma.apiToken.deleteMany({
+  // Find and delete SuiteOp Integration API tokens
+  const tokensToDelete = await prisma.apiToken.findMany({
     where: {
       teamId,
       name: 'SuiteOp Integration',
     },
+    select: { id: true },
   });
 
-  // Delete all SuiteOp-related webhooks for this team (hookdeck URLs)
-  const deletedWebhooks = await prisma.webhook.deleteMany({
+  let deletedTokens = 0;
+  for (const token of tokensToDelete) {
+    await prisma.apiToken.delete({ where: { id: token.id } });
+    deletedTokens++;
+  }
+
+  // Delete webhooks pointing to SuiteOp's hookdeck
+  const webhooksToDelete = await prisma.webhook.findMany({
     where: {
       teamId,
-      webhookUrl: {
-        contains: 'events.suiteop.com',
-      },
+      webhookUrl: { contains: 'events.suiteop.com' },
     },
+    select: { id: true },
   });
 
-  // Mark all authorizations for this team as revoked (clear plaintextToken)
-  await prisma.suiteOpAuthorization.updateMany({
-    where: {
-      teamId,
-    },
-    data: {
-      claimed: true,
-      plaintextToken: '',
-    },
-  });
+  let deletedWebhooks = 0;
+  for (const wh of webhooksToDelete) {
+    await prisma.webhook.delete({ where: { id: wh.id } });
+    deletedWebhooks++;
+  }
 
   return {
-    deletedTokens: deletedTokens.count,
-    deletedWebhooks: deletedWebhooks.count,
+    deletedTokens,
+    deletedWebhooks,
     teamId: team.id,
     teamName: team.name,
   };
