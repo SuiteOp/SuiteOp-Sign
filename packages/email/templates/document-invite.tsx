@@ -1,5 +1,4 @@
 import { useLingui } from '@lingui/react';
-import { Trans } from '@lingui/react/macro';
 import type { RecipientRole } from '@prisma/client';
 import { OrganisationType } from '@prisma/client';
 
@@ -94,12 +93,10 @@ export const DocumentInviteEmailTemplate = ({
             <Section>
               {organisationType === OrganisationType.PERSONAL && (
                 <Text className="my-4 text-base font-semibold">
-                  <Trans>
-                    {inviterName}{' '}
-                    <Link className="font-normal text-slate-400" href="mailto:{inviterEmail}">
-                      ({inviterEmail})
-                    </Link>
-                  </Trans>
+                  {inviterName}{' '}
+                  <Link className="font-normal text-slate-400" href={`mailto:${inviterEmail}`}>
+                    ({inviterEmail})
+                  </Link>
                 </Text>
               )}
 
@@ -107,9 +104,10 @@ export const DocumentInviteEmailTemplate = ({
                 {customBody ? (
                   <TemplateCustomMessageBody text={customBody} />
                 ) : (
-                  <Trans>
-                    {inviterName} has invited you to {action} the document "{documentName}".
-                  </Trans>
+                  <>
+                    {inviterName} has invited you to {action} the document &quot;{documentName}
+                    &quot;.
+                  </>
                 )}
               </Text>
             </Section>
