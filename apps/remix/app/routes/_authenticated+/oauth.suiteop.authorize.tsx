@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { redirect } from 'react-router';
 
@@ -22,7 +23,7 @@ import { appMetaTags } from '~/utils/meta';
 import type { Route } from './+types/oauth.suiteop.authorize';
 
 export function meta() {
-  return appMetaTags('Authorize SuiteOp');
+  return appMetaTags(msg`Authorize SuiteOp`);
 }
 
 /**
