@@ -1,5 +1,4 @@
 import { useLingui } from '@lingui/react';
-import { Trans } from '@lingui/react/macro';
 import { OrganisationType, RecipientRole } from '@prisma/client';
 import { P, match } from 'ts-pattern';
 
@@ -34,7 +33,39 @@ export const TemplateDocumentInvite = ({
 }: TemplateDocumentInviteProps) => {
   const { _ } = useLingui();
 
-  const { actionVerb } = RECIPIENT_ROLES_DESCRIPTION[role];
+  const action = _(RECIPIENT_ROLES_DESCRIPTION[role].actionVerb).toLowerCase();
+
+  const headingText = match({ selfSigner, organisationType, includeSenderDetails, teamName })
+    .with({ selfSigner: true }, () => `Please ${action} your document`)
+    .with(
+      {
+        organisationType: OrganisationType.ORGANISATION,
+        includeSenderDetails: true,
+        teamName: P.string,
+      },
+      () => `${inviterName} on behalf of "${teamName}" has invited you to ${action}`,
+    )
+    .with(
+      { organisationType: OrganisationType.ORGANISATION, teamName: P.string },
+      () => `${teamName} has invited you to ${action}`,
+    )
+    .otherwise(() => `${inviterName} has invited you to ${action}`);
+
+  const subtitleText = match(role)
+    .with(RecipientRole.SIGNER, () => 'Continue by signing the document.')
+    .with(RecipientRole.VIEWER, () => 'Continue by viewing the document.')
+    .with(RecipientRole.APPROVER, () => 'Continue by approving the document.')
+    .with(RecipientRole.CC, () => '')
+    .with(RecipientRole.ASSISTANT, () => 'Continue by assisting with the document.')
+    .exhaustive();
+
+  const buttonText = match(role)
+    .with(RecipientRole.SIGNER, () => 'View Document to sign')
+    .with(RecipientRole.VIEWER, () => 'View Document')
+    .with(RecipientRole.APPROVER, () => 'View Document to approve')
+    .with(RecipientRole.CC, () => '')
+    .with(RecipientRole.ASSISTANT, () => 'View Document to assist')
+    .exhaustive();
 
   return (
     <>
@@ -42,65 +73,19 @@ export const TemplateDocumentInvite = ({
 
       <Section>
         <Text className="text-primary mx-auto mb-0 max-w-[80%] text-center text-lg font-semibold">
-          {match({ selfSigner, organisationType, includeSenderDetails, teamName })
-            .with({ selfSigner: true }, () => (
-              <Trans>
-                Please {_(actionVerb).toLowerCase()} your document
-                <br />"{documentName}"
-              </Trans>
-            ))
-            .with(
-              {
-                organisationType: OrganisationType.ORGANISATION,
-                includeSenderDetails: true,
-                teamName: P.string,
-              },
-              () => (
-                <Trans>
-                  {inviterName} on behalf of "{teamName}" has invited you to{' '}
-                  {_(actionVerb).toLowerCase()}
-                  <br />"{documentName}"
-                </Trans>
-              ),
-            )
-            .with({ organisationType: OrganisationType.ORGANISATION, teamName: P.string }, () => (
-              <Trans>
-                {teamName} has invited you to {_(actionVerb).toLowerCase()}
-                <br />"{documentName}"
-              </Trans>
-            ))
-            .otherwise(() => (
-              <Trans>
-                {inviterName} has invited you to {_(actionVerb).toLowerCase()}
-                <br />"{documentName}"
-              </Trans>
-            ))}
+          {headingText}
+          <br />
+          &quot;{documentName}&quot;
         </Text>
 
-        <Text className="my-1 text-center text-base text-slate-400">
-          {match(role)
-            .with(RecipientRole.SIGNER, () => <Trans>Continue by signing the document.</Trans>)
-            .with(RecipientRole.VIEWER, () => <Trans>Continue by viewing the document.</Trans>)
-            .with(RecipientRole.APPROVER, () => <Trans>Continue by approving the document.</Trans>)
-            .with(RecipientRole.CC, () => '')
-            .with(RecipientRole.ASSISTANT, () => (
-              <Trans>Continue by assisting with the document.</Trans>
-            ))
-            .exhaustive()}
-        </Text>
+        <Text className="my-1 text-center text-base text-slate-400">{subtitleText}</Text>
 
         <Section className="mb-6 mt-8 text-center">
           <Button
             className="bg-documenso-500 text-sbase inline-flex items-center justify-center rounded-lg px-6 py-3 text-center font-medium text-black no-underline"
             href={signDocumentLink}
           >
-            {match(role)
-              .with(RecipientRole.SIGNER, () => <Trans>View Document to sign</Trans>)
-              .with(RecipientRole.VIEWER, () => <Trans>View Document</Trans>)
-              .with(RecipientRole.APPROVER, () => <Trans>View Document to approve</Trans>)
-              .with(RecipientRole.CC, () => '')
-              .with(RecipientRole.ASSISTANT, () => <Trans>View Document to assist</Trans>)
-              .exhaustive()}
+            {buttonText}
           </Button>
         </Section>
       </Section>

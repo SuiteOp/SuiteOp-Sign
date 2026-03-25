@@ -1,6 +1,5 @@
 import { createElement } from 'react';
 
-import { msg } from '@lingui/core/macro';
 import {
   DocumentStatus,
   EnvelopeType,
@@ -162,24 +161,18 @@ export const resendDocument = async ({
         .toLowerCase();
 
       let emailMessage = envelope.documentMeta.message || '';
-      let emailSubject = i18n._(msg`Reminder: Please ${recipientActionVerb} this document`);
+      let emailSubject = `Reminder: Please ${recipientActionVerb} this document`;
 
       if (selfSigner) {
-        emailMessage = i18n._(
-          msg`You have initiated the document ${`"${envelope.title}"`} that requires you to ${recipientActionVerb} it.`,
-        );
-        emailSubject = i18n._(msg`Reminder: Please ${recipientActionVerb} your document`);
+        emailMessage = `You have initiated the document "${envelope.title}" that requires you to ${recipientActionVerb} it.`;
+        emailSubject = `Reminder: Please ${recipientActionVerb} your document`;
       }
 
       if (organisationType === OrganisationType.ORGANISATION) {
-        emailSubject = i18n._(
-          msg`Reminder: ${envelope.team.name} invited you to ${recipientActionVerb} a document`,
-        );
+        emailSubject = `Reminder: ${envelope.team.name} invited you to ${recipientActionVerb} a document`;
         emailMessage =
           envelope.documentMeta.message ||
-          i18n._(
-            msg`${user.name || user.email} on behalf of "${envelope.team.name}" has invited you to ${recipientActionVerb} the document "${envelope.title}".`,
-          );
+          `${user.name || user.email} on behalf of "${envelope.team.name}" has invited you to ${recipientActionVerb} the document "${envelope.title}".`;
       }
 
       const customEmailTemplate = {
@@ -230,7 +223,7 @@ export const resendDocument = async ({
         replyTo: replyToEmail,
         subject: envelope.documentMeta.subject
           ? renderCustomEmailTemplate(
-              i18n._(msg`Reminder: ${envelope.documentMeta.subject}`),
+              `Reminder: ${envelope.documentMeta.subject}`,
               customEmailTemplate,
             )
           : emailSubject,
