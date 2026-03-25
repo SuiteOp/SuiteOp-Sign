@@ -1,6 +1,5 @@
 import { createElement } from 'react';
 
-import { msg } from '@lingui/core/macro';
 import {
   DocumentSource,
   DocumentStatus,
@@ -118,36 +117,28 @@ export const run = async ({
     .toLowerCase();
 
   let emailMessage = customEmail?.message || '';
-  let emailSubject = i18n._(msg`Please ${recipientActionVerb} this document`);
+  let emailSubject = `Please ${recipientActionVerb} this document`;
 
   if (selfSigner) {
-    emailMessage = i18n._(
-      msg`You have initiated the document ${`"${envelope.title}"`} that requires you to ${recipientActionVerb} it.`,
-    );
-    emailSubject = i18n._(msg`Please ${recipientActionVerb} your document`);
+    emailMessage = `You have initiated the document "${envelope.title}" that requires you to ${recipientActionVerb} it.`;
+    emailSubject = `Please ${recipientActionVerb} your document`;
   }
 
   if (isDirectTemplate) {
-    emailMessage = i18n._(
-      msg`A document was created by your direct template that requires you to ${recipientActionVerb} it.`,
-    );
-    emailSubject = i18n._(
-      msg`Please ${recipientActionVerb} this document created by your direct template`,
-    );
+    emailMessage = `A document was created by your direct template that requires you to ${recipientActionVerb} it.`;
+    emailSubject = `Please ${recipientActionVerb} this document created by your direct template`;
   }
 
   if (organisationType === OrganisationType.ORGANISATION) {
-    emailSubject = i18n._(msg`${team.name} invited you to ${recipientActionVerb} a document`);
+    emailSubject = `${team.name} invited you to ${recipientActionVerb} a document`;
     emailMessage = customEmail?.message ?? '';
 
     if (!emailMessage) {
       const inviterName = user.name || '';
 
-      emailMessage = i18n._(
-        settings.includeSenderDetails
-          ? msg`${inviterName} on behalf of "${team.name}" has invited you to ${recipientActionVerb} the document "${envelope.title}".`
-          : msg`${team.name} has invited you to ${recipientActionVerb} the document "${envelope.title}".`,
-      );
+      emailMessage = settings.includeSenderDetails
+        ? `${inviterName} on behalf of "${team.name}" has invited you to ${recipientActionVerb} the document "${envelope.title}".`
+        : `${team.name} has invited you to ${recipientActionVerb} the document "${envelope.title}".`;
     }
   }
 
