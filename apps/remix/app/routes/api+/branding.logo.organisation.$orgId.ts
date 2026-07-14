@@ -1,3 +1,4 @@
+import { sha256 } from '@documenso/lib/universal/crypto';
 import type { GetFileOptions } from '@documenso/lib/universal/upload/get-file.server';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
 import { loadLogo } from '@documenso/lib/utils/images/logo';
@@ -5,7 +6,9 @@ import { prisma } from '@documenso/prisma';
 
 import type { Route } from './+types/branding.logo.organisation.$orgId';
 
-export async function loader({ params }: Route.LoaderArgs) {
+const CACHE_CONTROL = 'public, max-age=0, stale-while-revalidate=86400';
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const organisationId = params.orgId;
 
   if (!organisationId) {
@@ -49,6 +52,18 @@ export async function loader({ params }: Route.LoaderArgs) {
     );
   }
 
+  const etag = `"${Buffer.from(sha256(settings.brandingLogo)).toString('hex')}"`;
+
+  if (request.headers.get('If-None-Match') === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        'Cache-Control': CACHE_CONTROL,
+      },
+    });
+  }
+
   let parsedLogo: unknown;
 
   try {
@@ -57,7 +72,9 @@ export async function loader({ params }: Route.LoaderArgs) {
     return Response.json({ status: 'error', message: 'Invalid logo data' }, { status: 500 });
   }
 
-  const file = await getFileServerSide(parsedLogo as GetFileOptions).catch(() => undefined);
+  const file = await getFileServerSide(parsedLogo as GetFileOptions).catch((e) => {
+    console.error(e);
+  });
 
   if (!file) {
     return Response.json(
@@ -75,8 +92,8 @@ export async function loader({ params }: Route.LoaderArgs) {
     headers: {
       'Content-Type': contentType,
       'Content-Length': content.length.toString(),
-      // Stale while revalidate for 1 hours to 24 hours
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+      'Cache-Control': CACHE_CONTROL,
+      ETag: etag,
     },
   });
 }

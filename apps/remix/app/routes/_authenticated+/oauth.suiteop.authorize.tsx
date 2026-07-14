@@ -1,28 +1,21 @@
-import { useState } from 'react';
-
-import { Trans } from '@lingui/react/macro';
-import { redirect } from 'react-router';
-
 import { getSession } from '@documenso/auth/server/lib/utils/get-session';
 import { SUITEOP_REDIRECT_URL } from '@documenso/lib/constants/app';
 import { createAuthorization } from '@documenso/lib/server-only/suiteop/create-authorization';
 import { getTeams } from '@documenso/lib/server-only/team/get-teams';
 import { Button } from '@documenso/ui/primitives/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@documenso/ui/primitives/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@documenso/ui/primitives/card';
 import { RadioGroup, RadioGroupItem } from '@documenso/ui/primitives/radio-group';
+import { msg } from '@lingui/core/macro';
+import { Trans } from '@lingui/react/macro';
+import { useState } from 'react';
+import { redirect } from 'react-router';
 
 import { appMetaTags } from '~/utils/meta';
 
 import type { Route } from './+types/oauth.suiteop.authorize';
 
 export function meta() {
-  return appMetaTags('Authorize SuiteOp');
+  return appMetaTags(msg`Authorize SuiteOp`);
 }
 
 /**
@@ -185,11 +178,7 @@ export default function OAuthSuiteOpAuthorizePage({ loaderData }: Route.Componen
             {state && <input type="hidden" name="state" value={state} />}
             <input type="hidden" name="teamId" value={selectedTeamId} />
             <input type="hidden" name="redirectUrl" value={redirectUrl} />
-            <RadioGroup
-              value={selectedTeamId}
-              onValueChange={setSelectedTeamId}
-              className="space-y-4"
-            >
+            <RadioGroup value={selectedTeamId} onValueChange={setSelectedTeamId} className="space-y-4">
               {teams.map((team) => (
                 <label
                   key={team.id}

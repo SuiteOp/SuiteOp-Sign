@@ -36,6 +36,8 @@ export default function EmbedPlaygroundPage() {
   const [envelopeType, setEnvelopeType] = useState<'DOCUMENT' | 'TEMPLATE'>(
     () => (searchParams.get('envelopeType') as 'DOCUMENT' | 'TEMPLATE') || 'DOCUMENT',
   );
+  const [folderId, setFolderId] = useState(() => searchParams.get('folderId') || '');
+  const [language, setLanguage] = useState(() => searchParams.get('language') || '');
 
   // Auto-launch if query params are present on mount
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export default function EmbedPlaygroundPage() {
     allowDistributing: false,
     allowDirectLink: false,
     allowDuplication: false,
+    allowSaveAsTemplate: false,
     allowDownloadPDF: false,
     allowDeletion: false,
   });
@@ -77,6 +80,7 @@ export default function EmbedPlaygroundPage() {
     allowConfigureOrder: true,
     allowUpload: true,
     allowDelete: true,
+    allowReplace: true,
   });
 
   const [recipientsFeatures, setRecipientsFeatures] = useState({
@@ -201,6 +205,8 @@ export default function EmbedPlaygroundPage() {
     mode: string;
     envelopeId: string;
     envelopeType: string;
+    folderId: string;
+    language: string;
   }) => {
     const newParams = new URLSearchParams();
 
@@ -222,6 +228,14 @@ export default function EmbedPlaygroundPage() {
 
     if (params.envelopeType && params.envelopeType !== 'DOCUMENT') {
       newParams.set('envelopeType', params.envelopeType);
+    }
+
+    if (params.folderId) {
+      newParams.set('folderId', params.folderId);
+    }
+
+    if (params.language) {
+      newParams.set('language', params.language);
     }
 
     const qs = newParams.toString();
@@ -263,6 +277,8 @@ export default function EmbedPlaygroundPage() {
     const hashData = {
       externalId: externalId || undefined,
       type: mode === 'create' ? envelopeType : undefined,
+      folderId: mode === 'create' && folderId ? folderId : undefined,
+      language: language || undefined,
       darkModeDisabled: darkModeDisabled || undefined,
       css: rawCss || undefined,
       cssVars: Object.keys(filteredCssVars).length > 0 ? filteredCssVars : undefined,
@@ -279,9 +295,7 @@ export default function EmbedPlaygroundPage() {
     const hash = btoa(encodeURIComponent(JSON.stringify(hashData)));
 
     const basePath =
-      mode === 'create'
-        ? '/embed/v2/authoring/envelope/create'
-        : `/embed/v2/authoring/envelope/edit/${envelopeId}`;
+      mode === 'create' ? '/embed/v2/authoring/envelope/create' : `/embed/v2/authoring/envelope/edit/${envelopeId}`;
 
     const buildIframeSrc = (path: string, tokenValue: string, hashValue: string): string => {
       // Ensure the token is treated strictly as a query parameter value.
@@ -292,7 +306,15 @@ export default function EmbedPlaygroundPage() {
     setIframeSrc(buildIframeSrc(basePath, presignToken, hash));
     setIframeKey((prev) => prev + 1);
 
-    updateQueryParams({ token: inputToken, externalId, mode, envelopeId, envelopeType });
+    updateQueryParams({
+      token: inputToken,
+      externalId,
+      mode,
+      envelopeId,
+      envelopeType,
+      folderId,
+      language,
+    });
   };
 
   const handleSubmit = useCallback(
@@ -306,6 +328,8 @@ export default function EmbedPlaygroundPage() {
       mode,
       envelopeId,
       envelopeType,
+      folderId,
+      language,
       generalFeatures,
       settingsFeatures,
       actionsFeatures,
@@ -324,6 +348,8 @@ export default function EmbedPlaygroundPage() {
     setMode('create');
     setEnvelopeId('');
     setEnvelopeType('DOCUMENT');
+    setFolderId('');
+    setLanguage('');
     setIframeSrc(null);
     setMessages([]);
     setTokenError(null);
@@ -346,9 +372,7 @@ export default function EmbedPlaygroundPage() {
     state: T,
     setState: React.Dispatch<React.SetStateAction<T>>,
   ) => (
-    <fieldset
-      style={{ border: '1px solid #ccc', padding: '8px', marginBottom: '8px', borderRadius: '4px' }}
-    >
+    <fieldset style={{ border: '1px solid #ccc', padding: '8px', marginBottom: '8px', borderRadius: '4px' }}>
       <legend style={{ fontWeight: 'bold', fontSize: '13px' }}>{label}</legend>
       {Object.entries(state).map(([key, value]) => (
         <label key={key} style={{ display: 'block', fontSize: '12px', marginBottom: '2px' }}>
@@ -391,15 +415,11 @@ export default function EmbedPlaygroundPage() {
               placeholder="api_... or presign token"
               required
             />
-            {tokenError && (
-              <div style={{ color: 'red', fontSize: '11px', marginTop: '4px' }}>{tokenError}</div>
-            )}
+            {tokenError && <div style={{ color: 'red', fontSize: '11px', marginTop: '4px' }}>{tokenError}</div>}
           </div>
 
           <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>
-              External ID (optional)
-            </label>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>External ID (optional)</label>
             <input
               type="text"
               value={externalId}
@@ -422,26 +442,35 @@ export default function EmbedPlaygroundPage() {
           </div>
 
           {mode === 'create' && (
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>
-                Envelope Type
-              </label>
-              <select
-                value={envelopeType}
-                onChange={(e) => setEnvelopeType(e.target.value as 'DOCUMENT' | 'TEMPLATE')}
-                style={{ width: '100%', padding: '4px', fontSize: '12px' }}
-              >
-                <option value="DOCUMENT">Document</option>
-                <option value="TEMPLATE">Template</option>
-              </select>
-            </div>
+            <>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Envelope Type</label>
+                <select
+                  value={envelopeType}
+                  onChange={(e) => setEnvelopeType(e.target.value as 'DOCUMENT' | 'TEMPLATE')}
+                  style={{ width: '100%', padding: '4px', fontSize: '12px' }}
+                >
+                  <option value="DOCUMENT">Document</option>
+                  <option value="TEMPLATE">Template</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Folder ID (optional)</label>
+                <input
+                  type="text"
+                  value={folderId}
+                  onChange={(e) => setFolderId(e.target.value)}
+                  style={{ width: '100%', padding: '4px', fontSize: '12px' }}
+                  placeholder="folder cuid"
+                />
+              </div>
+            </>
           )}
 
           {mode === 'edit' && (
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>
-                Envelope ID
-              </label>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Envelope ID</label>
               <input
                 type="text"
                 value={envelopeId}
@@ -452,6 +481,28 @@ export default function EmbedPlaygroundPage() {
               />
             </div>
           )}
+
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold' }}>Language (optional)</label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              style={{ width: '100%', padding: '4px', fontSize: '12px' }}
+            >
+              <option value="">Default (en)</option>
+              <option value="de">German (de)</option>
+              <option value="en">English (en)</option>
+              <option value="es">Spanish (es)</option>
+              <option value="fr">French (fr)</option>
+              <option value="it">Italian (it)</option>
+              <option value="ja">Japanese (ja)</option>
+              <option value="ko">Korean (ko)</option>
+              <option value="nl">Dutch (nl)</option>
+              <option value="pl">Polish (pl)</option>
+              <option value="pt-BR">Portuguese - Brazil (pt-BR)</option>
+              <option value="zh">Chinese (zh)</option>
+            </select>
+          </div>
 
           <h3 style={{ fontSize: '14px', margin: '12px 0 4px' }}>Feature Flags</h3>
 
@@ -614,9 +665,7 @@ export default function EmbedPlaygroundPage() {
               wordBreak: 'break-all',
             }}
           >
-            {messages.length === 0 && (
-              <span style={{ color: '#999' }}>Waiting for messages...</span>
-            )}
+            {messages.length === 0 && <span style={{ color: '#999' }}>Waiting for messages...</span>}
             {messages.map((msg, i) => (
               <div key={i} style={{ borderBottom: '1px solid #eee', padding: '2px 0' }}>
                 {msg}

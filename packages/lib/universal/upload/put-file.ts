@@ -1,24 +1,34 @@
-import { DocumentDataType } from '@prisma/client';
-import { base64 } from '@scure/base';
-import { match } from 'ts-pattern';
+import type { TUploadPdfResponse } from '@documenso/remix/server/api/files/files.types';
 
-import { env } from '@documenso/lib/utils/env';
-import type {
-  TGetPresignedPostUrlResponse,
-  TUploadPdfResponse,
-} from '@documenso/remix/server/api/files/files.types';
-
-import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
 import { AppError } from '../../errors/app-error';
 
 type File = {
   name: string;
   type: string;
-  size: number;
   arrayBuffer: () => Promise<ArrayBuffer>;
 };
 
-export const putPdfFile = async (file: File) => {
+/**
+ * Options for uploads that are not authorized by a logged-in session.
+ *
+ * Embedded authoring flows run cross-origin without a session cookie, so they
+ * must authorize uploads with their embedding presign token instead.
+ */
+export type PutFileOptions = {
+  presignToken?: string;
+};
+
+const buildUploadAuthHeaders = (options?: PutFileOptions): Record<string, string> => {
+  if (!options?.presignToken) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${options.presignToken}`,
+  };
+};
+
+export const putPdfFile = async (file: File, options?: PutFileOptions) => {
   const formData = new FormData();
 
   // Create a proper File object from the data
@@ -30,6 +40,7 @@ export const putPdfFile = async (file: File) => {
 
   const response = await fetch('/api/files/upload-pdf', {
     method: 'POST',
+    headers: buildUploadAuthHeaders(options),
     body: formData,
   });
 
@@ -41,85 +52,4 @@ export const putPdfFile = async (file: File) => {
   const result: TUploadPdfResponse = await response.json();
 
   return result;
-};
-
-/**
- * Uploads a file to the appropriate storage location.
- */
-export const putFile = async (file: File) => {
-  const NEXT_PUBLIC_UPLOAD_TRANSPORT = env('NEXT_PUBLIC_UPLOAD_TRANSPORT');
-
-  return await match(NEXT_PUBLIC_UPLOAD_TRANSPORT)
-    .with('s3', async () => putFileInS3(file))
-    .otherwise(async () => putFileInDatabase(file));
-};
-
-const putFileInDatabase = async (file: File) => {
-  const contents = await file.arrayBuffer();
-
-  const binaryData = new Uint8Array(contents);
-
-  const asciiData = base64.encode(binaryData);
-
-  return {
-    type: DocumentDataType.BYTES_64,
-    data: asciiData,
-  };
-};
-
-const putFileInS3 = async (file: File) => {
-  console.log(`[S3 Upload] Starting upload for: ${file.name} (${file.size} bytes, ${file.type})`);
-
-  const getPresignedUrlResponse = await fetch(
-    `${NEXT_PUBLIC_WEBAPP_URL()}/api/files/presigned-post-url`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        fileName: file.name,
-        contentType: file.type,
-      }),
-    },
-  );
-
-  if (!getPresignedUrlResponse.ok) {
-    const errorText = await getPresignedUrlResponse.text();
-    console.error(
-      `[S3 Upload] Failed to get presigned URL: ${getPresignedUrlResponse.status} - ${errorText}`,
-    );
-    throw new Error(
-      `Failed to get presigned post url, failed with status code ${getPresignedUrlResponse.status}`,
-    );
-  }
-
-  const { url, key }: TGetPresignedPostUrlResponse = await getPresignedUrlResponse.json();
-  console.log(`[S3 Upload] Got presigned URL for key: ${key}`);
-
-  const body = await file.arrayBuffer();
-
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[S3 Upload] Failed to upload "${file.name}": ${response.status} - ${errorText}`);
-    console.error(`[S3 Upload] File details: size=${file.size}, type=${file.type}`);
-    throw new Error(
-      `Failed to upload file "${file.name}", failed with status code ${response.status}`,
-    );
-  }
-
-  console.log(`[S3 Upload] Successfully uploaded: ${file.name}`);
-
-  return {
-    type: DocumentDataType.S3_PATH,
-    data: key,
-  };
 };

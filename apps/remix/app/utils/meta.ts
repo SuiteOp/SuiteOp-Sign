@@ -1,12 +1,13 @@
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
+import { i18n, type MessageDescriptor } from '@lingui/core';
 
-export const appMetaTags = (title?: string) => {
+export const appMetaTags = (title?: MessageDescriptor) => {
   const description =
     'SuiteOp Sign - Professional document signing platform. Fast, secure, and beautiful document signing experience. Integrates with your favorite tools, customizable, and expandable.';
 
   return [
     {
-      title: title ? `${title} - SuiteOp Sign` : 'SuiteOp Sign',
+      title: title ? `${i18n._(title)} - SuiteOp Sign` : 'SuiteOp Sign',
     },
     {
       name: 'description',

@@ -1,9 +1,8 @@
+import { formatTemplatesPath, getHighestTeamRoleInGroup } from '@documenso/lib/utils/teams';
+import { prisma } from '@documenso/prisma';
 import type { Prisma } from '@prisma/client';
 import { DocumentVisibility, EnvelopeType, TeamMemberRole } from '@prisma/client';
 import { match } from 'ts-pattern';
-
-import { formatTemplatesPath, getHighestTeamRoleInGroup } from '@documenso/lib/utils/teams';
-import { prisma } from '@documenso/prisma';
 
 import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { getUserTeamGroups } from '../team/get-user-team-groups';
@@ -14,11 +13,7 @@ export type SearchTemplatesWithKeywordOptions = {
   limit?: number;
 };
 
-export const searchTemplatesWithKeyword = async ({
-  query,
-  userId,
-  limit = 20,
-}: SearchTemplatesWithKeywordOptions) => {
+export const searchTemplatesWithKeyword = async ({ query, userId, limit = 20 }: SearchTemplatesWithKeywordOptions) => {
   if (!query.trim()) {
     return [];
   }
@@ -34,19 +29,23 @@ export const searchTemplatesWithKeyword = async ({
 
   const teamIds = [...teamGroupsByTeamId.keys()];
 
+  const titleOrRecipientMatch: Prisma.EnvelopeWhereInput = {
+    OR: [
+      { title: { contains: query, mode: 'insensitive' } },
+      {
+        recipients: {
+          some: { email: { contains: query, mode: 'insensitive' } },
+        },
+      },
+    ],
+  };
+
   const filters: Prisma.EnvelopeWhereInput[] = [
     // Templates owned by the user matching title or recipient email.
     {
       userId,
       deletedAt: null,
-      OR: [
-        { title: { contains: query, mode: 'insensitive' } },
-        {
-          recipients: {
-            some: { email: { contains: query, mode: 'insensitive' } },
-          },
-        },
-      ],
+      ...titleOrRecipientMatch,
     },
   ];
 
@@ -55,14 +54,7 @@ export const searchTemplatesWithKeyword = async ({
     filters.push({
       teamId: { in: teamIds },
       deletedAt: null,
-      OR: [
-        { title: { contains: query, mode: 'insensitive' } },
-        {
-          recipients: {
-            some: { email: { contains: query, mode: 'insensitive' } },
-          },
-        },
-      ],
+      ...titleOrRecipientMatch,
     });
   }
 
@@ -85,6 +77,7 @@ export const searchTemplatesWithKeyword = async ({
       },
       team: {
         select: {
+          id: true,
           url: true,
         },
       },
@@ -122,6 +115,7 @@ export const searchTemplatesWithKeyword = async ({
     .slice(0, limit)
     .map((envelope) => {
       const legacyTemplateId = mapSecondaryIdToTemplateId(envelope.secondaryId);
+
       const path = `${formatTemplatesPath(envelope.team.url)}/${legacyTemplateId}`;
 
       return {

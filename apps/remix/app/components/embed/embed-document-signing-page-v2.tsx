@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
-
-import { useLingui } from '@lingui/react';
-import { EnvelopeType } from '@prisma/client';
-
+import { APP_I18N_OPTIONS } from '@documenso/lib/constants/i18n';
 import { ZSignDocumentEmbedDataSchema } from '@documenso/lib/types/embed-document-sign-schema';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
+import { dynamicActivate } from '@documenso/lib/utils/i18n';
+import { useLingui } from '@lingui/react';
+import { EnvelopeType } from '@prisma/client';
+import { useEffect, useLayoutEffect, useState } from 'react';
 
 import { injectCss } from '~/utils/css-vars';
 
@@ -36,9 +36,7 @@ export const EmbedSignDocumentV2ClientPage = ({
   const [hasFinishedInit, setHasFinishedInit] = useState(false);
   const [allowDocumentRejection, setAllowDocumentRejection] = useState(false);
   const [isNameLocked, setIsNameLocked] = useState(false);
-  const [isEmailLocked, setIsEmailLocked] = useState(
-    envelope.type === EnvelopeType.DOCUMENT && !!email,
-  );
+  const [isEmailLocked, setIsEmailLocked] = useState(envelope.type === EnvelopeType.DOCUMENT && !!email);
 
   const onDocumentCompleted = (data: {
     token: string;
@@ -162,11 +160,18 @@ export const EmbedSignDocumentV2ClientPage = ({
           cssVars: data.cssVars,
         });
       }
+
+      if (data.language && data.language !== APP_I18N_OPTIONS.sourceLang) {
+        void dynamicActivate(data.language).finally(() => {
+          setHasFinishedInit(true);
+        });
+      } else {
+        setHasFinishedInit(true);
+      }
     } catch (err) {
       console.error(err);
+      setHasFinishedInit(true);
     }
-
-    setHasFinishedInit(true);
 
     // !: While the setters are stable we still want to ensure we're avoiding
     // !: re-renders.

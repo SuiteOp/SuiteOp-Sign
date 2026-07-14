@@ -1,13 +1,8 @@
-import type { Context } from 'hono';
-import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
-
-import {
-  formatSecureCookieName,
-  getCookieDomain,
-  useSecureCookies,
-} from '@documenso/lib/constants/auth';
+import { formatSecureCookieName, getCookieDomain, useSecureCookies } from '@documenso/lib/constants/auth';
 import { appLog } from '@documenso/lib/utils/debugger';
 import { env } from '@documenso/lib/utils/env';
+import type { Context } from 'hono';
+import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
 
 import { AUTH_SESSION_LIFETIME } from '../../config';
 import { extractCookieFromHeaders } from '../utils/cookies';
@@ -28,20 +23,14 @@ const getAuthSecret = () => {
 
 /**
  * Generic auth session cookie options.
- *
- * Must be a function so that `expires` is computed fresh on each call,
- * rather than once at module-load time (which becomes stale after
- * AUTH_SESSION_LIFETIME and causes logins to silently fail).
  */
-export const getSessionCookieOptions = () =>
-  ({
-    httpOnly: true,
-    path: '/',
-    sameSite: useSecureCookies ? 'none' : 'lax',
-    secure: useSecureCookies,
-    domain: getCookieDomain(),
-    expires: new Date(Date.now() + AUTH_SESSION_LIFETIME),
-  }) as const;
+export const sessionCookieOptions = {
+  httpOnly: true,
+  path: '/',
+  sameSite: useSecureCookies ? 'none' : 'lax',
+  secure: useSecureCookies,
+  domain: getCookieDomain(),
+} as const;
 
 export const extractSessionCookieFromHeaders = (headers: Headers): string | null => {
   return extractCookieFromHeaders(sessionCookieName, headers);
@@ -66,13 +55,10 @@ export const getSessionCookie = async (c: Context): Promise<string | null> => {
  * @param sessionToken - The session token to set.
  */
 export const setSessionCookie = async (c: Context, sessionToken: string) => {
-  await setSignedCookie(
-    c,
-    sessionCookieName,
-    sessionToken,
-    getAuthSecret(),
-    getSessionCookieOptions(),
-  ).catch((err) => {
+  await setSignedCookie(c, sessionCookieName, sessionToken, getAuthSecret(), {
+    ...sessionCookieOptions,
+    expires: new Date(Date.now() + AUTH_SESSION_LIFETIME),
+  }).catch((err) => {
     appLog('SetSessionCookie', `Error setting signed cookie: ${err}`);
 
     throw err;
@@ -86,7 +72,7 @@ export const setSessionCookie = async (c: Context, sessionToken: string) => {
  * @param sessionToken - The session token to set.
  */
 export const deleteSessionCookie = (c: Context) => {
-  deleteCookie(c, sessionCookieName, getSessionCookieOptions());
+  deleteCookie(c, sessionCookieName, sessionCookieOptions);
 };
 
 export const getCsrfCookie = async (c: Context) => {
@@ -99,7 +85,7 @@ export const setCsrfCookie = async (c: Context) => {
   const csrfToken = generateSessionToken();
 
   await setSignedCookie(c, csrfCookieName, csrfToken, getAuthSecret(), {
-    ...getSessionCookieOptions(),
+    ...sessionCookieOptions,
 
     // Explicity set to undefined for session lived cookie.
     expires: undefined,

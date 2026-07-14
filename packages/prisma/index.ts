@@ -13,6 +13,10 @@ const prisma = remember(
   () =>
     new PrismaClient({
       datasourceUrl: getDatabaseUrl(),
+      transactionOptions: {
+        maxWait: 5000,
+        timeout: 10000,
+      },
     }),
 );
 
@@ -71,9 +75,7 @@ export const prismaWithReplicas = remember('prismaWithReplicas', () => {
     return prisma;
   }
 
-  const replicaUrls = process.env.NEXT_PRIVATE_DATABASE_REPLICA_URLS.split(',').map((url) =>
-    url.trim(),
-  );
+  const replicaUrls = process.env.NEXT_PRIVATE_DATABASE_REPLICA_URLS.split(',').map((url) => url.trim());
 
   // !: Nasty hack, means we can't do any fancy $primary/$replica queries
   // !: but it is acceptable since not all setups will have replicas anyway.
@@ -85,6 +87,5 @@ export const prismaWithReplicas = remember('prismaWithReplicas', () => {
   ) as unknown as typeof prisma;
 });
 
-export { prismaWithReplicas as prisma };
-
 export { sql } from 'kysely';
+export { prismaWithReplicas as prisma };
