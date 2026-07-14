@@ -97,12 +97,24 @@ export const EnvelopeDownloadDialog = ({
       access: token ? { type: 'recipient', token } : { type: 'user' },
     },
     {
-      initialData: initialEnvelopeItems ? { data: initialEnvelopeItems } : undefined,
+      // `title` is filled in by the query once it runs (on open); until then
+      // `resolveItemTitle` falls back to the item title for this placeholder.
+      initialData: initialEnvelopeItems ? { title: '', data: initialEnvelopeItems } : undefined,
       enabled: open,
     },
   );
 
   const envelopeItems = envelopeItemsPayload?.data || [];
+  const envelopeTitle = envelopeItemsPayload?.title;
+
+  // For a single-item envelope the item *is* the document, so name the download
+  // after the current document title. The item title is set at creation and is
+  // not updated when the document is renamed (e.g. a document generated from a
+  // template keeps the template's item title), which would otherwise produce a
+  // filename that no longer matches the document. Multi-item envelopes keep
+  // their per-file titles to stay distinct.
+  const resolveItemTitle = (item: EnvelopeItemToDownload) =>
+    envelopeItems.length === 1 && envelopeTitle ? envelopeTitle : item.title;
 
   const onDownload = async (envelopeItem: EnvelopeItemToDownload, version: 'original' | 'signed' | 'pending') => {
     const { id: envelopeItemId } = envelopeItem;
@@ -120,7 +132,7 @@ export const EnvelopeDownloadDialog = ({
       await downloadPDF({
         envelopeItem,
         token,
-        fileName: envelopeItem.title,
+        fileName: resolveItemTitle(envelopeItem),
         version,
       });
 
@@ -186,8 +198,8 @@ export const EnvelopeDownloadDialog = ({
 
                   <div className="min-w-0 flex-1">
                     {/* Todo: Envelopes - Fix overflow */}
-                    <h4 className="truncate font-medium text-foreground text-sm" title={item.title}>
-                      {item.title}
+                    <h4 className="truncate font-medium text-foreground text-sm" title={resolveItemTitle(item)}>
+                      {resolveItemTitle(item)}
                     </h4>
                     <p className="mt-0.5 text-muted-foreground text-xs">
                       <Trans>PDF Document</Trans>

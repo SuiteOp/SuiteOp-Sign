@@ -15,6 +15,13 @@ export const ZGetEnvelopeItemsByTokenRequestSchema = z.object({
 });
 
 export const ZGetEnvelopeItemsByTokenResponseSchema = z.object({
+  /**
+   * The parent envelope (document) title. Used as the download filename for
+   * single-item envelopes so it reflects the current document title rather than
+   * the item title, which is set at creation and not updated when the document
+   * is renamed.
+   */
+  title: z.string(),
   data: EnvelopeItemSchema.pick({
     id: true,
     envelopeId: true,
