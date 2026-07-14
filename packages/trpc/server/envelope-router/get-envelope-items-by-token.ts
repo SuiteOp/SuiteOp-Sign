@@ -34,23 +34,25 @@ export const getEnvelopeItemsByTokenRoute = maybeAuthenticatedProcedure
         });
       }
 
-      const { envelopeItems: data } = await handleGetEnvelopeItemsByUser({
+      const { envelopeItems: data, title } = await handleGetEnvelopeItemsByUser({
         envelopeId,
         userId: user.id,
         teamId,
       });
 
       return {
+        title,
         data,
       };
     }
 
-    const { envelopeItems: data } = await handleGetEnvelopeItemsByToken({
+    const { envelopeItems: data, title } = await handleGetEnvelopeItemsByToken({
       envelopeId,
       token: access.token,
     });
 
     return {
+      title,
       data,
     };
   });
@@ -83,6 +85,7 @@ const handleGetEnvelopeItemsByToken = async ({ envelopeId, token }: { envelopeId
 
   return {
     envelopeItems: envelope.envelopeItems,
+    title: envelope.title,
   };
 };
 
@@ -147,5 +150,6 @@ const handleGetEnvelopeItemsByUser = async ({
 
   return {
     envelopeItems: envelope.envelopeItems,
+    title: envelope.title,
   };
 };
