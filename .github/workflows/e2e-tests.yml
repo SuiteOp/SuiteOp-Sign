@@ -13,7 +13,12 @@ jobs:
   e2e_tests:
     name: 'E2E Tests'
     timeout-minutes: 60
-    runs-on: warp-ubuntu-2204-x64-8x
+    # GitHub-hosted, not WarpBuild. Upstream Documenso runs this on its own
+    # `warp-ubuntu-2204-x64-8x` fleet; SuiteOp has no WarpBuild account, so in
+    # this fork that label matched no runner and every E2E job sat QUEUED until
+    # the 24h expiry or a cancellation — never a pass, never a fail, just an
+    # empty check. This repo is public, so the standard runner is free.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
