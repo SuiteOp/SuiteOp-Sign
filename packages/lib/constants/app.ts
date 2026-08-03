@@ -4,6 +4,8 @@ import { SignatureLevel, type TSignatureLevel } from '../types/signature-level';
 
 export const APP_DOCUMENT_UPLOAD_SIZE_LIMIT = Number(env('NEXT_PUBLIC_DOCUMENT_SIZE_UPLOAD_LIMIT')) || 50;
 
+let hasWarnedAboutWebappUrl = false;
+
 export const NEXT_PUBLIC_WEBAPP_URL = () => {
   const value = env('NEXT_PUBLIC_WEBAPP_URL');
 
@@ -22,6 +24,18 @@ export const NEXT_PUBLIC_WEBAPP_URL = () => {
     }
   } catch {
     // Invalid URL, fall through to default.
+  }
+
+  // A value that is SET but unusable is a misconfiguration, not a default. The
+  // fallback keeps the process alive, but every absolute link and cookie domain
+  // it then derives is wrong, so say so once — loudly enough to grep for in the
+  // deploy logs, quietly enough that the hundreds of call sites don't spam.
+  if (value && !hasWarnedAboutWebappUrl) {
+    hasWarnedAboutWebappUrl = true;
+
+    console.warn(
+      `NEXT_PUBLIC_WEBAPP_URL is set to ${JSON.stringify(value)}, which is not an absolute URL with a hostname. Falling back to http://localhost:3000 — absolute links (signing URLs, emails) and cookie domains will be wrong until this is fixed.`,
+    );
   }
 
   return 'http://localhost:3000';
