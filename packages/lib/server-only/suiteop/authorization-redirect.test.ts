@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createSuiteOpAuthorizationRedirect } from './suiteop-authorization-redirect';
+import { createSuiteOpAuthorizationRedirect } from './authorization-redirect';
 
 describe('createSuiteOpAuthorizationRedirect', () => {
   it('forces a document navigation to the SuiteOp callback', () => {
