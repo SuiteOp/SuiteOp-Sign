@@ -1,0 +1,246 @@
+# Agent commands: comment "/agent review" or "/agent ship" on any PR and the
+# SuiteOp agent station picks it up — five model lanes in parallel, aggregated
+# into ONE consolidated PR review, and for `ship` a squash-merge once every
+# gate is green. Repeatable: comment again for an incremental re-review of what
+# changed since the last one. Anything after the verb is passed to the agent as
+# extra instructions, e.g. "/agent review focus on the signing flow".
+# ("@agent …" also works but is NOT recommended — typing it opens GitHub's
+# @-mention autocomplete and renders as a user mention.)
+#
+# Transport: one outbound POST to the station's automation webhook, through
+# Cloudflare Access (service token) plus the automation's own webhook secret.
+# Nothing inbound is opened, and the payload carries no credential.
+#
+# THIS REPOSITORY IS PUBLIC, which is why the `if:` below admits only
+# author_association MEMBER or OWNER — org members and owners. COLLABORATOR is
+# deliberately excluded and must never be added: the comment box here is open
+# to the entire internet, and `ship` merges to a branch Railway deploys.
+# Everything the agent writes on a PR is likewise world-readable forever, so
+# the review policy forbids it from putting internal context (customer names,
+# internal hostnames, board links) into anything it posts here.
+#
+# WHAT THE AGENT DOES IN THIS REPO. The station holds a write credential for
+# SuiteOp-Sign, so nothing is borrowed: it checks the PR out, rebases it onto
+# latest main, runs the review lanes, and in `ship` mode fixes what it finds
+# and squash-merges — which DEPLOYS, because Railway builds `main`. Because
+# this repo is a FORK of documenso/documenso that SuiteOp periodically rebases
+# onto new upstream releases, the review's central question is what a change
+# costs at the next rebase, and upstream's own AGENTS.md is the style standard.
+# One limit worth knowing: for a PR whose head branch lives on someone else's
+# fork the station cannot push, so `ship` reviews and hands back instead of
+# merging around unfixed findings. The policy it follows lives in SuiteOp-Core
+# (`.claude/skills/suiteop-ondemand-review`, §Repo profiles → `sign`).
+# Ops runbook: SuiteOp/Agent-Station AGENT-FLOWS.md (Flow A).
+name: Agent commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write # the 👀 reaction, the ack, and fallback replies
+  issues: write # the ack UPSERTS its comment, and PATCH /issues/comments/{id}
+  #                is an Issues-scoped endpoint even on a PR conversation
+  contents: read
+
+# One dispatch at a time per PR, so two comments seconds apart can't race each
+# other on the same sticky ack comment. NOTE what this does NOT do: it
+# serializes DISPATCHES, not RUNS — each job here is a single POST, so comments
+# minutes apart both dispatch happily. What stops the second one becoming a
+# second six-lane panel is the station-side same-PR hold in Agent-Station
+# scripts/agent-dispatch.sh, and the ack below is what stops a human generating
+# the duplicate in the first place.
+concurrency:
+  group: agent-commands-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # PR comments only, starting with "/agent " (or the tolerated "@agent "),
+    # from ORG members/owners only — see the PUBLIC note in the header for why
+    # COLLABORATOR is excluded.
+    if: >
+      github.event.issue.pull_request &&
+      (startsWith(github.event.comment.body, '/agent ') ||
+       startsWith(github.event.comment.body, '@agent ')) &&
+      contains(fromJSON('["MEMBER","OWNER"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.issue.number }}
+      # Held as a secret rather than written here, because this repo is PUBLIC
+      # and every other repo on this flow is private. A Cloudflare Access
+      # service token is the ONLY gate in front of the station API, so there is
+      # no reason to also publish, permanently and to a search-indexed page,
+      # exactly which host that token opens. Set by
+      # Agent-Station/scripts/setup-sign-agent-secrets.sh; the dispatch step
+      # fails loudly if it is empty.
+      STATION: ${{ secrets.KANDEV_STATION_API }}
+      CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+    steps:
+      - name: Parse command
+        id: cmd
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          # first line only; strip CR
+          first_line=$(printf '%s' "$BODY" | head -1 | tr -d '\r')
+          verb=$(printf '%s' "$first_line" | awk '{print $2}')
+          extra=$(printf '%s' "$first_line" | cut -d' ' -f3- | sed 's/^ *//')
+          # multi-line comments: everything after line 1 is also instructions
+          rest=$(printf '%s' "$BODY" | tail -n +2 | tr -d '\r')
+          [ -n "$rest" ] && extra="${extra}${extra:+ }${rest}"
+          case "$verb" in
+            review|ship) echo "verb=$verb" >> "$GITHUB_OUTPUT" ;;
+            *) echo "verb=unknown" >> "$GITHUB_OUTPUT" ;;
+          esac
+          # Random per-run heredoc delimiter: $extra is commenter-controlled, and
+          # a fixed delimiter lets a crafted comment close the heredoc early and
+          # append its own key=value pairs (e.g. flip verb review -> ship).
+          delim="EOF_$(openssl rand -hex 16)"
+          {
+            echo "extra<<${delim}"
+            echo "$extra"
+            echo "${delim}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Unknown command → help reply
+        if: steps.cmd.outputs.verb == 'unknown'
+        run: |
+          gh api "repos/$REPO/issues/$PR/comments" \
+            -f body="Unknown \`/agent\` command. Available: \`/agent review [instructions]\` (multi-model review posted back here), \`/agent ship [instructions]\` (review, fix, and squash-merge once every gate is green — merging deploys to Railway)."
+
+      - name: Ack with 👀
+        if: steps.cmd.outputs.verb != 'unknown'
+        run: |
+          gh api "repos/$REPO/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=eyes
+
+      - name: Fetch PR head/base
+        if: steps.cmd.outputs.verb != 'unknown'
+        id: pr
+        run: |
+          set -euo pipefail
+          pr_json=$(gh api "repos/$REPO/pulls/$PR")
+          {
+            echo "head=$(echo "$pr_json"     | jq -r .head.ref)"
+            echo "head_sha=$(echo "$pr_json" | jq -r .head.sha)"
+            echo "base=$(echo "$pr_json"     | jq -r .base.ref)"
+            echo "url=$(echo "$pr_json"      | jq -r .html_url)"
+            # Empty for a same-repo PR; the fork's owner otherwise. The station
+            # cannot push to a fork it does not own, so `ship` degrades to
+            # review-and-hand-back — it needs to know that up front rather than
+            # discovering it as a 403 halfway through Phase 3.
+            echo "head_owner=$(echo "$pr_json" | jq -r 'if .head.repo.full_name == .base.repo.full_name then "" else (.head.repo.owner.login // "unknown") end')"
+          } >> "$GITHUB_OUTPUT"
+
+      # Tell the requester what is about to happen, within seconds of their
+      # comment and BEFORE the dispatch. The 👀 reaction is otherwise the ONLY
+      # feedback until the run starts — which on a busy board is 25+ minutes —
+      # and the agent's own progress comment is an upsert, which notifies
+      # nobody. That silence is what produced the 2026-07-29 retry storm on
+      # SuiteOp-Core: three waves of the same request, nine redundant runs.
+      #
+      # SuiteOp-Core does this with scripts/agent-comms/agent-ack.py, which also
+      # detects "a run for this PR is already live" off the board. That script
+      # is not reachable from here (it lives in a repo this job's token cannot
+      # read), so this is the plain receipt; the DEFERRED case is still handled
+      # station-side, it is just announced by the run itself rather than here.
+      - name: Acknowledge on the PR
+        if: steps.cmd.outputs.verb != 'unknown'
+        # Never let a bad ack cost the review it was announcing: continue-on-error
+        # catches failure, the timeout catches a hang in front of the dispatch.
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          VERB: ${{ steps.cmd.outputs.verb }}
+          REQUESTER: ${{ github.event.comment.user.login }}
+          HEAD_OWNER: ${{ steps.pr.outputs.head_owner }}
+        run: |
+          set -euo pipefail
+          marker='<!-- agent-ack -->'
+          head8=$(printf '%s' "${{ steps.pr.outputs.head_sha }}" | cut -c1-8)
+          # A ship request against a fork branch cannot end in a merge. Say so
+          # in the receipt rather than letting the run discover it and explain
+          # it 25 minutes later.
+          forknote=""
+          if [ "$VERB" = "ship" ] && [ -n "$HEAD_OWNER" ]; then
+            forknote="⚠️ This PR's branch lives on \`$HEAD_OWNER\`'s fork, which the agent cannot push to — so \`ship\` will review and hand the fixes back to the author rather than merging. Re-run \`/agent ship\` once the branch is clean."
+          fi
+          # printf, not a heredoc: inside a YAML block scalar the terminator
+          # cannot sit at column 0, and an indented one never ends the heredoc.
+          # Built in stages rather than one format string, because the optional
+          # fork note needs a real blank line around it — `\n` written inside a
+          # %s ARGUMENT is two literal characters, not a newline, and printf
+          # does not expand escapes in arguments.
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "$marker" \
+            "🤖 **\`/agent $VERB\`** received from @$REQUESTER — queued on the agent station." \
+            "It runs a five-model review panel in its own worktree, so pickup can take a while when the board is busy. Progress appears in a separate status comment on this PR, which the agent **edits in place** — GitHub sends no notification for an edit, so check that comment rather than waiting for a ping." \
+            "**Please don't re-comment to retry.** A second request for this PR is held behind the first and then runs as an incremental re-review of whatever changed in between — nothing is lost, and re-asking only makes you wait longer.")
+          [ -n "$forknote" ] && body=$(printf '%s\n\n%s' "$body" "$forknote")
+          body=$(printf '%s\n\n%s\n' "$body" \
+            "<sub>Last request: \`$VERB\` by @$REQUESTER at $(date -u +'%Y-%m-%d %H:%M UTC') · head \`$head8\`</sub>")
+          existing=$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" \
+            --jq "[.[] | select(.body | contains(\"$marker\")) | .id] | last // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" >/dev/null
+            echo "ack updated ($existing)"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null
+            echo "ack posted"
+          fi
+
+      - name: Dispatch to agent station
+        if: steps.cmd.outputs.verb != 'unknown'
+        env:
+          VERB: ${{ steps.cmd.outputs.verb }}
+          EXTRA: ${{ steps.cmd.outputs.extra }}
+          WH_SECRET_REVIEW: ${{ secrets.KANDEV_WEBHOOK_SECRET_REVIEW }}
+          WH_SECRET_SHIP: ${{ secrets.KANDEV_WEBHOOK_SECRET_SHIP }}
+        run: |
+          set -euo pipefail
+          # An unset STATION would otherwise POST to a relative URL and fail as
+          # something unrecognisable. Name the actual cause.
+          if [ -z "${STATION:-}" ]; then
+            echo "::error::secret KANDEV_STATION_API is not set on this repo — run Agent-Station/scripts/setup-sign-agent-secrets.sh"
+            exit 1
+          fi
+          # Board automation ids — not secrets, and useless without both the
+          # Cloudflare Access service token and the automation's webhook secret.
+          case "$VERB" in
+            review) WH_ID="9dbdaeb2-7a0a-4d76-8799-c83dfcaf9f3c"; WH_SECRET="$WH_SECRET_REVIEW" ;;
+            ship)   WH_ID="b9c16d9c-1005-489d-9882-13cbdeb6a94b"; WH_SECRET="$WH_SECRET_SHIP" ;;
+          esac
+          payload=$(jq -n \
+            --arg repo "$REPO" \
+            --arg pr_number "$PR" \
+            --arg pr_url "${{ steps.pr.outputs.url }}" \
+            --arg head_branch "${{ steps.pr.outputs.head }}" \
+            --arg head_sha "${{ steps.pr.outputs.head_sha }}" \
+            --arg base_branch "${{ steps.pr.outputs.base }}" \
+            --arg head_owner "${{ steps.pr.outputs.head_owner }}" \
+            --arg commenter "${{ github.event.comment.user.login }}" \
+            --arg comment_url "${{ github.event.comment.html_url }}" \
+            --arg extra "$EXTRA" \
+            '{repo:$repo, pr_number:$pr_number, pr_url:$pr_url, head_branch:$head_branch,
+              head_sha:$head_sha, base_branch:$base_branch, head_owner:$head_owner,
+              commenter:$commenter, comment_url:$comment_url, extra:$extra}')
+          code=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' --max-time 30 \
+            -X POST "$STATION/automations/webhook/${WH_ID}" \
+            -H "CF-Access-Client-Id: $CF_ID" \
+            -H "CF-Access-Client-Secret: $CF_SECRET" \
+            -H "X-Webhook-Secret: $WH_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
+          echo "agent station responded: $code"
+          if [ "$code" -ge 300 ]; then
+            # Status only — never the response body, which is external content.
+            run_url="${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
+            gh api "repos/$REPO/issues/$PR/comments" \
+              -f body="⚠️ \`/agent $VERB\` dispatch to the agent station failed (HTTP $code). Details in the [action run](${run_url}); ops runbook: Agent-Station/AGENT-FLOWS.md."
+            exit 1
+          fi
