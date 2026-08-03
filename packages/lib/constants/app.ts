@@ -4,8 +4,28 @@ import { SignatureLevel, type TSignatureLevel } from '../types/signature-level';
 
 export const APP_DOCUMENT_UPLOAD_SIZE_LIMIT = Number(env('NEXT_PUBLIC_DOCUMENT_SIZE_UPLOAD_LIMIT')) || 50;
 
-export const NEXT_PUBLIC_WEBAPP_URL = () =>
-  env('NEXT_PUBLIC_WEBAPP_URL') ?? 'http://localhost:3000';
+export const NEXT_PUBLIC_WEBAPP_URL = () => {
+  const value = env('NEXT_PUBLIC_WEBAPP_URL');
+
+  // `??` only catches an ABSENT variable. Railway resolves
+  // `https://${{RAILWAY_PUBLIC_DOMAIN}}` to the bare string `https://` when no
+  // public domain is assigned yet — which is truthy, sails through, and then
+  // throws `TypeError: Invalid URL` inside getCookieDomain() at module import,
+  // crash-looping the container before it can serve anything.
+  try {
+    if (value) {
+      const url = new URL(value);
+
+      if (url.hostname) {
+        return value;
+      }
+    }
+  } catch {
+    // Invalid URL, fall through to default.
+  }
+
+  return 'http://localhost:3000';
+};
 
 export const NEXT_PUBLIC_SIGNING_CONTACT_INFO = () =>
   env('NEXT_PUBLIC_SIGNING_CONTACT_INFO') ?? NEXT_PUBLIC_WEBAPP_URL();
