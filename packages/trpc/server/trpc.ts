@@ -9,10 +9,12 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import type { AnyZodObject } from 'zod';
 
 import { dataTransformer } from '../utils/data-transformer';
+import { allowsApiTokenAuth } from './api-token-auth';
 import type { TrpcContext } from './context';
 
 // Can't import type from trpc-to-openapi because it breaks build, not sure why.
 export type TrpcRouteMeta = {
+  apiTokenAuth?: boolean;
   openapi?: {
     enabled?: boolean;
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -84,10 +86,10 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
 
   const authorizationHeader = ctx.req.headers.get('authorization');
 
-  const isApiV2 = Boolean(meta?.openapi?.path);
+  const apiTokenAuthAllowed = allowsApiTokenAuth(meta);
 
   // Taken from `authenticatedMiddleware` in `@documenso/api/v1/middleware/authenticated.ts`.
-  if (authorizationHeader && isApiV2) {
+  if (authorizationHeader && apiTokenAuthAllowed) {
     // Support for both "Authorization: Bearer api_xxx" and "Authorization: api_xxx"
     const [token] = (authorizationHeader || '').split('Bearer ').filter((s) => s.length > 0);
 
@@ -196,10 +198,10 @@ export const maybeAuthenticatedMiddleware = t.middleware(async ({ ctx, next, pat
 
   const authorizationHeader = ctx.req.headers.get('authorization');
 
-  const isApiV2 = Boolean(meta?.openapi?.path);
+  const apiTokenAuthAllowed = allowsApiTokenAuth(meta);
 
   // Taken from `authenticatedMiddleware` in `@documenso/api/v1/middleware/authenticated.ts`.
-  if (authorizationHeader && isApiV2) {
+  if (authorizationHeader && apiTokenAuthAllowed) {
     // Support for both "Authorization: Bearer api_xxx" and "Authorization: api_xxx"
     const [token] = (authorizationHeader || '').split('Bearer ').filter((s) => s.length > 0);
 

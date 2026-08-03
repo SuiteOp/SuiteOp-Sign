@@ -4,6 +4,7 @@ import { authenticatedProcedure } from '../trpc';
 import { ZGetApiTokensRequestSchema, ZGetApiTokensResponseSchema } from './get-api-tokens.types';
 
 export const getApiTokensRoute = authenticatedProcedure
+  .meta({ apiTokenAuth: true })
   .input(ZGetApiTokensRequestSchema)
   .output(ZGetApiTokensResponseSchema)
   .query(async ({ ctx }) => {

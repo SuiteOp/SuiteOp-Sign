@@ -30,7 +30,7 @@ export const authenticatedMiddleware = <
     args: T & { req: TsRestRequest },
     user: Pick<User, 'id' | 'email' | 'name' | 'disabled'>,
     team: Team,
-    options: { metadata: ApiRequestMetadata; logger: Logger },
+    options: { apiTokenId: number; metadata: ApiRequestMetadata; logger: Logger },
   ) => Promise<R>,
 ) => {
   return async (args: T, { request }: B) => {
@@ -92,7 +92,7 @@ export const authenticatedMiddleware = <
         },
         apiToken.user,
         apiToken.team,
-        { metadata, logger: apiLogger },
+        { apiTokenId: apiToken.id, metadata, logger: apiLogger },
       );
     } catch (err) {
       apiLogger.error({
