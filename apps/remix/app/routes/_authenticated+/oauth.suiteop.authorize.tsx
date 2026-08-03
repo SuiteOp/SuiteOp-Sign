@@ -1,5 +1,6 @@
 import { getSession } from '@documenso/auth/server/lib/utils/get-session';
 import { SUITEOP_REDIRECT_URL } from '@documenso/lib/constants/app';
+import { createSuiteOpAuthorizationRedirect } from '@documenso/lib/server-only/suiteop/authorization-redirect';
 import { createAuthorization } from '@documenso/lib/server-only/suiteop/create-authorization';
 import { getTeams } from '@documenso/lib/server-only/team/get-teams';
 import { Button } from '@documenso/ui/primitives/button';
@@ -11,7 +12,6 @@ import { useState } from 'react';
 
 import { appMetaTags } from '~/utils/meta';
 import type { Route } from './+types/oauth.suiteop.authorize';
-import { createSuiteOpAuthorizationRedirect } from './suiteop-authorization-redirect';
 
 export function meta() {
   return appMetaTags(msg`Authorize SuiteOp`);
