@@ -2,6 +2,7 @@ import { prisma } from '@documenso/prisma';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GLOBAL_WEBHOOK_EVENTS, GLOBAL_WEBHOOK_URL } from '../../constants/app';
+import { AppErrorCode } from '../../errors/app-error';
 import { claimAuthorization } from './claim-authorization';
 
 vi.mock('@documenso/prisma', () => ({
@@ -16,6 +17,39 @@ vi.mock('@documenso/prisma', () => ({
 describe('claimAuthorization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('rejects an unknown claim code before starting a transaction', async () => {
+    vi.mocked(prisma.suiteOpAuthorization.findUnique).mockResolvedValue(null);
+
+    await expect(claimAuthorization({ claimCode: 'missing' })).rejects.toMatchObject({
+      code: AppErrorCode.NOT_FOUND,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an already-claimed code before starting a transaction', async () => {
+    vi.mocked(prisma.suiteOpAuthorization.findUnique).mockResolvedValue({
+      claimed: true,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+
+    await expect(claimAuthorization({ claimCode: 'claimed' })).rejects.toMatchObject({
+      code: AppErrorCode.ALREADY_EXISTS,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expired code before starting a transaction', async () => {
+    vi.mocked(prisma.suiteOpAuthorization.findUnique).mockResolvedValue({
+      claimed: false,
+      expiresAt: new Date(Date.now() - 60_000),
+    } as never);
+
+    await expect(claimAuthorization({ claimCode: 'expired' })).rejects.toMatchObject({
+      code: AppErrorCode.EXPIRED_CODE,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('replaces stale SuiteOp webhooks and returns exact remote resource ownership', async () => {
@@ -49,7 +83,7 @@ describe('claimAuthorization', () => {
       createdAt: new Date(),
       team: { id: 3, name: 'Personal Team' },
       apiToken: { id: 19, token: 'hashed-token' },
-    });
+    } as never);
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
       callback({
         suiteOpAuthorization: { update },
@@ -73,6 +107,15 @@ describe('claimAuthorization', () => {
       where: {
         teamId: 3,
         webhookUrl: GLOBAL_WEBHOOK_URL,
+      },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: {
+        id: 11,
+      },
+      data: {
+        claimed: true,
+        plaintextToken: '',
       },
     });
     expect(callOrder).toEqual(['authorization.update', 'webhook.deleteMany', 'webhook.create']);
