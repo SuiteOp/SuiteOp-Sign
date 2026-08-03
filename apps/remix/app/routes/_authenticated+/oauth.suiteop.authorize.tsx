@@ -8,11 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@documenso/ui/primitives/radio-group
 import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { useState } from 'react';
-import { redirect } from 'react-router';
 
 import { appMetaTags } from '~/utils/meta';
-
 import type { Route } from './+types/oauth.suiteop.authorize';
+import { createSuiteOpAuthorizationRedirect } from './suiteop-authorization-redirect';
 
 export function meta() {
   return appMetaTags(msg`Authorize SuiteOp`);
@@ -98,7 +97,7 @@ export async function action({ request }: Route.ActionArgs) {
     redirectUrlObj.searchParams.set('state', state);
   }
 
-  throw redirect(redirectUrlObj.toString());
+  throw createSuiteOpAuthorizationRedirect(redirectUrlObj);
 }
 
 export default function OAuthSuiteOpAuthorizePage({ loaderData }: Route.ComponentProps) {
