@@ -1,6 +1,5 @@
 import { getSession } from '@documenso/auth/server/lib/utils/get-session';
 import { SUITEOP_REDIRECT_URL } from '@documenso/lib/constants/app';
-import { createSuiteOpAuthorizationRedirect } from '@documenso/lib/server-only/suiteop/authorization-redirect';
 import { createAuthorization } from '@documenso/lib/server-only/suiteop/create-authorization';
 import { getTeams } from '@documenso/lib/server-only/team/get-teams';
 import { Button } from '@documenso/ui/primitives/button';
@@ -8,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@docu
 import { RadioGroup, RadioGroupItem } from '@documenso/ui/primitives/radio-group';
 import { msg } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useActionData } from 'react-router';
 
 import { appMetaTags } from '~/utils/meta';
 import type { Route } from './+types/oauth.suiteop.authorize';
@@ -97,14 +97,24 @@ export async function action({ request }: Route.ActionArgs) {
     redirectUrlObj.searchParams.set('state', state);
   }
 
-  throw createSuiteOpAuthorizationRedirect(redirectUrlObj);
+  // Return the callback URL to the browser instead of redirecting this form
+  // submission. The app's `form-action 'self'` CSP blocks cross-origin
+  // redirects in a form response, including validated SuiteOp callbacks.
+  return { redirectUrl: redirectUrlObj.toString() };
 }
 
 export default function OAuthSuiteOpAuthorizePage({ loaderData }: Route.ComponentProps) {
   const { teams, state, redirectUrl } = loaderData;
+  const actionData = useActionData<typeof action>();
 
   // Initialize state at the top level (required for React hooks)
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.id.toString() || '');
+
+  useEffect(() => {
+    if (actionData?.redirectUrl) {
+      window.location.assign(actionData.redirectUrl);
+    }
+  }, [actionData]);
 
   // No teams - show message
   if (teams.length === 0) {
