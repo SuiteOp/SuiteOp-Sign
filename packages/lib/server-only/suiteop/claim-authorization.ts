@@ -47,7 +47,7 @@ export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOption
   }
 
   // Mark as claimed and clear plaintext token, and create webhook in a transaction
-  await prisma.$transaction(async (tx) => {
+  const webhook = await prisma.$transaction(async (tx) => {
     await tx.suiteOpAuthorization.update({
       where: {
         id: authorization.id,
@@ -58,8 +58,17 @@ export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOption
       },
     });
 
-    // Create a webhook so SuiteOp receives document events for this team
-    await tx.webhook.create({
+    // A team can reconnect after an interrupted callback. Keep exactly one
+    // SuiteOp-managed global webhook instead of accumulating duplicates.
+    await tx.webhook.deleteMany({
+      where: {
+        teamId: authorization.teamId,
+        webhookUrl: GLOBAL_WEBHOOK_URL,
+      },
+    });
+
+    // Create a webhook so SuiteOp receives document events for this team.
+    return await tx.webhook.create({
       data: {
         webhookUrl: GLOBAL_WEBHOOK_URL,
         eventTriggers: [...GLOBAL_WEBHOOK_EVENTS],
@@ -68,12 +77,19 @@ export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOption
         userId: authorization.userId,
         teamId: authorization.teamId,
       },
+      select: {
+        id: true,
+        webhookUrl: true,
+        eventTriggers: true,
+      },
     });
   });
 
   return {
     token: authorization.plaintextToken,
+    apiTokenId: authorization.apiToken.id,
     teamId: authorization.team.id,
     teamName: authorization.team.name,
+    webhook,
   };
 };

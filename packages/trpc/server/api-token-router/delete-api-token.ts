@@ -4,6 +4,7 @@ import { authenticatedProcedure } from '../trpc';
 import { ZDeleteApiTokenRequestSchema, ZDeleteApiTokenResponseSchema } from './delete-api-token.types';
 
 export const deleteApiTokenRoute = authenticatedProcedure
+  .meta({ apiTokenAuth: true })
   .input(ZDeleteApiTokenRequestSchema)
   .output(ZDeleteApiTokenResponseSchema)
   .mutation(async ({ input, ctx }) => {

@@ -22,6 +22,7 @@ import {
   SendStatus,
   SigningStatus,
   TemplateType,
+  WebhookTriggerEvents,
 } from '@prisma/client';
 import { z } from 'zod';
 
@@ -653,11 +654,18 @@ export const ZSuiteOpGetCodeRequestSchema = z.object({
 
 export const ZSuiteOpGetCodeResponseSchema = z.object({
   token: z.string(),
+  apiTokenId: z.number(),
   teamId: z.number(),
   teamName: z.string(),
+  webhook: z.object({
+    id: z.string(),
+    webhookUrl: z.string().url(),
+    eventTriggers: z.array(z.nativeEnum(WebhookTriggerEvents)),
+  }),
 });
 
 export const ZSuiteOpGetInfoResponseSchema = z.object({
+  apiTokenId: z.number(),
   teamId: z.number(),
   teamName: z.string(),
   valid: z.boolean(),
