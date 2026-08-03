@@ -29,6 +29,23 @@ jobs:
       - name: Build app
         run: npm run build
 
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/node-install
+
+      # Only @documenso/lib for now: it is the one workspace whose `test` script
+      # is a one-shot `vitest run` needing no services. `packages/signing`'s is
+      # bare `vitest`, which would hang in watch mode.
+      - name: Run unit tests
+        run: npm run test -w @documenso/lib
+
   build_docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
