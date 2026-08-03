@@ -2,6 +2,7 @@ import { deleteTokenById } from '@documenso/lib/server-only/public-api/delete-ap
 
 import { authenticatedProcedure } from '../trpc';
 import { ZDeleteApiTokenRequestSchema, ZDeleteApiTokenResponseSchema } from './delete-api-token.types';
+import { assertApiTokenTeamScope } from './delete-api-token-auth';
 
 export const deleteApiTokenRoute = authenticatedProcedure
   .meta({ apiTokenAuth: true })
@@ -9,6 +10,12 @@ export const deleteApiTokenRoute = authenticatedProcedure
   .output(ZDeleteApiTokenResponseSchema)
   .mutation(async ({ input, ctx }) => {
     const { id, teamId } = input;
+
+    assertApiTokenTeamScope({
+      authenticatedTeamId: ctx.teamId,
+      isApiTokenRequest: ctx.session === null,
+      requestedTeamId: teamId,
+    });
 
     ctx.logger.info({
       input: {

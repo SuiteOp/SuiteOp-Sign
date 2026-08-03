@@ -22,7 +22,7 @@ export const webhookRouter = router({
     resend: resendWebhookCallRoute,
   },
 
-  getTeamWebhooks: authenticatedProcedure.meta({ apiTokenAuth: true }).query(async ({ ctx }) => {
+  getTeamWebhooks: authenticatedProcedure.query(async ({ ctx }) => {
     ctx.logger.info({
       input: {
         teamId: ctx.teamId,
@@ -48,40 +48,34 @@ export const webhookRouter = router({
     });
   }),
 
-  createWebhook: authenticatedProcedure
-    .meta({ apiTokenAuth: true })
-    .input(ZCreateWebhookRequestSchema)
-    .mutation(async ({ input, ctx }) => {
-      const { enabled, eventTriggers, secret, webhookUrl } = input;
+  createWebhook: authenticatedProcedure.input(ZCreateWebhookRequestSchema).mutation(async ({ input, ctx }) => {
+    const { enabled, eventTriggers, secret, webhookUrl } = input;
 
-      return await createWebhook({
-        enabled,
-        secret,
-        webhookUrl,
-        eventTriggers,
-        teamId: ctx.teamId,
-        userId: ctx.user.id,
-      });
-    }),
+    return await createWebhook({
+      enabled,
+      secret,
+      webhookUrl,
+      eventTriggers,
+      teamId: ctx.teamId,
+      userId: ctx.user.id,
+    });
+  }),
 
-  deleteWebhook: authenticatedProcedure
-    .meta({ apiTokenAuth: true })
-    .input(ZDeleteWebhookRequestSchema)
-    .mutation(async ({ input, ctx }) => {
-      const { id } = input;
+  deleteWebhook: authenticatedProcedure.input(ZDeleteWebhookRequestSchema).mutation(async ({ input, ctx }) => {
+    const { id } = input;
 
-      ctx.logger.info({
-        input: {
-          id,
-        },
-      });
-
-      return await deleteWebhookById({
+    ctx.logger.info({
+      input: {
         id,
-        teamId: ctx.teamId,
-        userId: ctx.user.id,
-      });
-    }),
+      },
+    });
+
+    return await deleteWebhookById({
+      id,
+      teamId: ctx.teamId,
+      userId: ctx.user.id,
+    });
+  }),
 
   editWebhook: authenticatedProcedure.input(ZEditWebhookRequestSchema).mutation(async ({ input, ctx }) => {
     const { id, ...data } = input;
