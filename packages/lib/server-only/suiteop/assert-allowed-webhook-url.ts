@@ -6,19 +6,24 @@ const ALLOWED_HOSTS = ['suiteop.com'];
 const ALLOWED_HOST_SUFFIXES = ['.suiteop.com'];
 
 /**
- * Extra host suffixes accepted in addition to SuiteOp's own domain, as a
+ * Extra hostnames accepted in addition to SuiteOp's own domain, as a
  * comma-separated list — empty everywhere unless a deployment sets it.
  *
  * This exists for preview environments, whose API is reachable only on the
  * PaaS-generated hostname. Those namespaces are shared and self-service, so
  * they are configuration rather than a constant: baking one into the source
  * would let anybody who can host on the same PaaS receive a team's documents.
+ *
+ * These match by EQUALITY, never by suffix. Suffix matching is safe only under
+ * a registrable domain SuiteOp owns — on a shared namespace it would re-admit
+ * every tenant, and even one specific preview host used as a suffix would
+ * admit any attacker-chosen prefix of it.
  */
-const getExtraAllowedHostSuffixes = (): string[] =>
-  (env('NEXT_PRIVATE_SUITEOP_WEBHOOK_HOST_SUFFIXES') ?? '')
+const getExtraAllowedHosts = (): string[] =>
+  (env('NEXT_PRIVATE_SUITEOP_WEBHOOK_EXTRA_HOSTS') ?? '')
     .split(',')
-    .map((suffix) => suffix.trim().toLowerCase())
-    .filter((suffix) => suffix.length > 0);
+    .map((host) => host.trim().toLowerCase())
+    .filter((host) => host.length > 0);
 
 /**
  * Reject a SuiteOp-supplied webhook URL that is not a SuiteOp address.
@@ -59,8 +64,10 @@ export const assertAllowedSuiteOpWebhookUrl = (webhookUrl: string): string => {
   }
 
   const hostname = url.hostname.toLowerCase();
-  const allowedSuffixes = [...ALLOWED_HOST_SUFFIXES, ...getExtraAllowedHostSuffixes()];
-  const isAllowed = ALLOWED_HOSTS.includes(hostname) || allowedSuffixes.some((suffix) => hostname.endsWith(suffix));
+  const isAllowed =
+    ALLOWED_HOSTS.includes(hostname) ||
+    getExtraAllowedHosts().includes(hostname) ||
+    ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
 
   if (!isAllowed) {
     throw new AppError(AppErrorCode.INVALID_BODY, {

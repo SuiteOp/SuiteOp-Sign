@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AppErrorCode } from '../../errors/app-error';
 import { assertAllowedSuiteOpWebhookUrl } from './assert-allowed-webhook-url';
 
-const PREVIEW_URL = 'https://suiteop-api-pr-9.up.railway.app/api/webhooks/documenso/token';
+const PREVIEW_HOST = 'preview-example.test';
+const PREVIEW_URL = `https://${PREVIEW_HOST}/api/webhooks/documenso/token`;
 
 describe('assertAllowedSuiteOpWebhookUrl', () => {
   afterEach(() => {
-    delete process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_HOST_SUFFIXES;
+    delete process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_EXTRA_HOSTS;
   });
 
   it.each([
@@ -34,24 +35,35 @@ describe('assertAllowedSuiteOpWebhookUrl', () => {
     );
   });
 
-  // `*.up.railway.app` is the PaaS's shared generated namespace: anyone can
-  // take a subdomain on it. Accepting it by default would hand a leaked master
-  // key the exact "forward this team's documents anywhere" primitive the
-  // allowlist exists to deny, so preview hosts are opt-in per deployment.
-  it('rejects a shared PaaS host when no extra suffix is configured', () => {
+  // A preview API is reachable only on its PaaS-generated hostname, and those
+  // namespaces are shared and self-service. Accepting one by default would hand
+  // a leaked master key the exact "forward this team's documents anywhere"
+  // primitive the allowlist exists to deny, so it is opt-in per deployment.
+  it('rejects a preview host when no extra host is configured', () => {
     expect(() => assertAllowedSuiteOpWebhookUrl(PREVIEW_URL)).toThrowError(
       expect.objectContaining({ code: AppErrorCode.INVALID_BODY }),
     );
   });
 
-  it('accepts a preview host once the deployment opts into its suffix', () => {
-    process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_HOST_SUFFIXES = '.up.railway.app';
+  it('accepts a preview host once the deployment opts into it', () => {
+    process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_EXTRA_HOSTS = PREVIEW_HOST;
 
     expect(assertAllowedSuiteOpWebhookUrl(PREVIEW_URL)).toBe(PREVIEW_URL);
   });
 
-  it('still rejects an unrelated host when extra suffixes are configured', () => {
-    process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_HOST_SUFFIXES = '.up.railway.app';
+  // Configured hosts match by equality. Were they suffixes, opting into one
+  // preview host would admit every attacker-chosen prefix of it — and opting
+  // into the PaaS namespace itself would admit every one of its tenants.
+  it('does not admit a prefixed lookalike of a configured host', () => {
+    process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_EXTRA_HOSTS = PREVIEW_HOST;
+
+    expect(() => assertAllowedSuiteOpWebhookUrl(`https://attacker-${PREVIEW_HOST}/hook`)).toThrowError(
+      expect.objectContaining({ code: AppErrorCode.INVALID_BODY }),
+    );
+  });
+
+  it('still rejects an unrelated host when extra hosts are configured', () => {
+    process.env.NEXT_PRIVATE_SUITEOP_WEBHOOK_EXTRA_HOSTS = PREVIEW_HOST;
 
     expect(() => assertAllowedSuiteOpWebhookUrl('https://attacker.example.com/hook')).toThrowError(
       expect.objectContaining({ code: AppErrorCode.INVALID_BODY }),
