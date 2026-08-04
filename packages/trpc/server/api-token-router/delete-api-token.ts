@@ -13,8 +13,10 @@ export const deleteApiTokenRoute = authenticatedProcedure
 
     assertApiTokenTeamScope({
       authenticatedTeamId: ctx.teamId,
+      authenticatedApiTokenId: ctx.apiTokenId,
       isApiTokenRequest: ctx.session === null,
       requestedTeamId: teamId,
+      requestedTokenId: id,
     });
 
     ctx.logger.info({

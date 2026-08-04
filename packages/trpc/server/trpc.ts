@@ -121,6 +121,10 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
         user: apiToken.user,
         teamId: apiToken.teamId,
         session: null,
+        // Which token authenticated this call, so a route can scope a
+        // destructive action to the caller's own token instead of to its
+        // whole team.
+        apiTokenId: apiToken.id,
         metadata: {
           ...ctx.metadata,
           auditUser: apiToken.team
@@ -174,6 +178,7 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
       logger: trpcSessionLogger,
       user: ctx.user,
       session: ctx.session,
+      apiTokenId: null,
       metadata: {
         ...ctx.metadata,
         auditUser: {
