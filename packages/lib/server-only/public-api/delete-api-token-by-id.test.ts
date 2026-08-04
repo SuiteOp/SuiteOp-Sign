@@ -33,6 +33,9 @@ const runTransaction = (authorization: AuthorizationRow, remainingAuthorizations
       count: vi.fn().mockResolvedValue(remainingAuthorizations),
     },
     webhook: {
+      findFirst: vi.fn().mockResolvedValue({
+        webhookUrl: 'https://api-eu.suiteop.com/api/webhooks/documenso/url-token',
+      }),
       deleteMany: vi.fn(() => {
         calls.push('webhook.deleteMany');
         return Promise.resolve({ count: 1 });
