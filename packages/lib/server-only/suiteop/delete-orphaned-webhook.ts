@@ -45,18 +45,20 @@ export const readSuiteOpTokenWebhook = async ({ tx, apiTokenId }: ReadSuiteOpTok
  * The global webhook is the exception: it is one row per team, shared by every
  * SuiteOp integration on it and by the legacy app behind that address. Revoking
  * one token must not silence the others, so it only goes when no claimed
- * authorization is left — whether or not this authorization recorded it.
- * Authorizations claimed before webhooks were recorded are all on that URL and
- * reach the same rule through the fallback.
+ * authorization is left — and then it goes by URL rather than by recorded id,
+ * because the surviving row may have been recorded by a sibling authorization,
+ * or by one claimed before `webhookId` existed and so recorded nothing at all.
  */
 export const deleteSuiteOpWebhookForToken = async ({ tx, teamId, webhookId }: DeleteSuiteOpWebhookForTokenOptions) => {
-  const teamHasSuiteOpIntegrationLeft = async () =>
+  // Runs after the token's cascade, so the revoked authorization is already
+  // gone and cannot count itself as a survivor.
+  const isLastSuiteOpIntegration =
     (await tx.suiteOpAuthorization.count({
       where: {
         teamId,
         claimed: true,
       },
-    })) > 0;
+    })) === 0;
 
   if (webhookId) {
     const webhook = await tx.webhook.findFirst({
@@ -69,25 +71,20 @@ export const deleteSuiteOpWebhookForToken = async ({ tx, teamId, webhookId }: De
       },
     });
 
-    if (!webhook) {
-      return;
+    // A regional endpoint belongs to exactly one integration, so it goes with
+    // it. The global address is shared and is only ever removed by the sweep
+    // below, whichever authorization happened to record it.
+    if (webhook && webhook.webhookUrl !== GLOBAL_WEBHOOK_URL) {
+      await tx.webhook.deleteMany({
+        where: {
+          id: webhookId,
+          teamId,
+        },
+      });
     }
-
-    if (webhook.webhookUrl === GLOBAL_WEBHOOK_URL && (await teamHasSuiteOpIntegrationLeft())) {
-      return;
-    }
-
-    await tx.webhook.deleteMany({
-      where: {
-        id: webhookId,
-        teamId,
-      },
-    });
-
-    return;
   }
 
-  if (await teamHasSuiteOpIntegrationLeft()) {
+  if (!isLastSuiteOpIntegration) {
     return;
   }
 

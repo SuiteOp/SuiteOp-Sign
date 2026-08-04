@@ -50,15 +50,35 @@ describe('deleteSuiteOpWebhookForToken', () => {
   });
 
   it('deletes exactly the recorded webhook, scoped to the team', async () => {
-    const tx = createTx();
+    const tx = createTx(1);
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-regional' });
+
+    // A regional endpoint belongs to one integration, so it goes by id — and
+    // with another integration still claimed, nothing else is touched.
+    expect(tx.webhook.deleteMany).toHaveBeenCalledTimes(1);
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'webhook-regional', teamId: 7 },
+    });
+  });
+
+  // The leak this replaced: a team whose authorizations sat on DIFFERENT
+  // addresses left a live global webhook behind forever. Revoking the global
+  // one kept it (a regional integration was still claimed), and revoking the
+  // regional one afterwards only ever deleted its own row by id — so nothing
+  // ever swept the global address, and the disconnected team kept receiving
+  // document events.
+  it('sweeps a surviving global webhook when the last integration was a regional one', async () => {
+    const tx = createTx(0, null, { webhookUrl: REGIONAL_URL });
 
     await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-regional' });
 
     expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
       where: { id: 'webhook-regional', teamId: 7 },
     });
-    // A regional endpoint belongs to one integration — no survivor count needed.
-    expect(tx.suiteOpAuthorization.count).not.toHaveBeenCalled();
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
+    });
   });
 
   // The global address is one row per team, shared by every integration on it
@@ -72,22 +92,34 @@ describe('deleteSuiteOpWebhookForToken', () => {
     expect(tx.webhook.deleteMany).not.toHaveBeenCalled();
   });
 
+  // By URL, not by the recorded id: a sibling authorization may hold a
+  // different row at the same shared address.
   it('deletes a recorded global webhook once it is the last integration', async () => {
     const tx = createTx(0, null, { webhookUrl: GLOBAL_WEBHOOK_URL });
 
     await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-global' });
 
     expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'webhook-global', teamId: 7 },
+      where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
     });
   });
 
-  it('does nothing when the recorded webhook is already gone', async () => {
-    const tx = createTx(0, null, null);
+  it('leaves the team alone when the recorded webhook is gone and an integration remains', async () => {
+    const tx = createTx(1, null, null);
 
     await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-missing' });
 
     expect(tx.webhook.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('still sweeps the global address when the recorded webhook is already gone', async () => {
+    const tx = createTx(0, null, null);
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-missing' });
+
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
+    });
   });
 
   // Authorizations claimed before webhooks were recorded are all on the shared

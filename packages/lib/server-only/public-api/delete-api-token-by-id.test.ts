@@ -59,7 +59,9 @@ describe('deleteTokenById', () => {
   // session-only, so if the token deletion does not take the webhook with it,
   // the team keeps POSTing document events to a disconnected integration.
   it('removes the recorded webhook in the same transaction as the token', async () => {
-    const { tx, calls } = runTransaction({ webhookId: 'webhook-regional' });
+    // Another integration is still claimed, so the shared global address is
+    // left alone and the only deletion is this token's own regional webhook.
+    const { tx, calls } = runTransaction({ webhookId: 'webhook-regional' }, 1);
 
     await deleteTokenById({ id: 19, userId: 3, teamId: 7 });
 
