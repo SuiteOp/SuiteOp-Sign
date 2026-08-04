@@ -14,7 +14,9 @@ vi.mock('@documenso/prisma', () => ({
   },
 }));
 
-const runTransaction = (remainingAuthorizations: number) => {
+type AuthorizationRow = { webhookId: string | null } | null;
+
+const runTransaction = (authorization: AuthorizationRow, remainingAuthorizations = 0) => {
   const calls: string[] = [];
   const tx = {
     apiToken: {
@@ -24,6 +26,10 @@ const runTransaction = (remainingAuthorizations: number) => {
       }),
     },
     suiteOpAuthorization: {
+      findFirst: vi.fn(() => {
+        calls.push('authorization.findFirst');
+        return Promise.resolve(authorization);
+      }),
       count: vi.fn().mockResolvedValue(remainingAuthorizations),
     },
     webhook: {
@@ -49,22 +55,32 @@ describe('deleteTokenById', () => {
   // SuiteOp disconnects by deleting the token it was issued. Webhook CRUD is
   // session-only, so if the token deletion does not take the webhook with it,
   // the team keeps POSTing document events to a disconnected integration.
-  it('removes the orphaned SuiteOp webhook in the same transaction as the token', async () => {
-    const { tx, calls } = runTransaction(0);
+  it('removes the recorded webhook in the same transaction as the token', async () => {
+    const { tx, calls } = runTransaction({ webhookId: 'webhook-regional' });
 
     await deleteTokenById({ id: 19, userId: 3, teamId: 7 });
 
     expect(tx.apiToken.delete).toHaveBeenCalledWith({ where: { id: 19, teamId: 7 } });
     expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
-      where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
+      where: { id: 'webhook-regional', teamId: 7 },
     });
-    // Authorization rows cascade with the token, so the survivor count is only
-    // meaningful once the token is gone.
-    expect(calls).toEqual(['apiToken.delete', 'webhook.deleteMany']);
+    // The authorization row cascades away with its token, so the webhook it
+    // names is only readable before the delete.
+    expect(calls).toEqual(['authorization.findFirst', 'apiToken.delete', 'webhook.deleteMany']);
   });
 
-  it('leaves the webhook alone when the team still has a claimed authorization', async () => {
-    const { tx } = runTransaction(1);
+  it('falls back to the global webhook for an authorization that recorded none', async () => {
+    const { tx } = runTransaction({ webhookId: null }, 0);
+
+    await deleteTokenById({ id: 19, userId: 3, teamId: 7 });
+
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
+    });
+  });
+
+  it('touches no webhook when the token is not a SuiteOp integration token', async () => {
+    const { tx } = runTransaction(null);
 
     await deleteTokenById({ id: 19, userId: 3, teamId: 7 });
 

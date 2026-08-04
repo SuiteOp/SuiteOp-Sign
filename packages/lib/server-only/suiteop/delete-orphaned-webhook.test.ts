@@ -1,52 +1,76 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GLOBAL_WEBHOOK_URL } from '../../constants/app';
-import { deleteOrphanedSuiteOpWebhook } from './delete-orphaned-webhook';
+import { deleteSuiteOpWebhookForToken, readSuiteOpTokenWebhook } from './delete-orphaned-webhook';
 
-const createTx = (remainingAuthorizations: number) => ({
+const createTx = (remainingAuthorizations = 0, authorization: { webhookId: string | null } | null = null) => ({
   suiteOpAuthorization: {
     count: vi.fn().mockResolvedValue(remainingAuthorizations),
+    findFirst: vi.fn().mockResolvedValue(authorization),
   },
   webhook: {
     deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
   },
 });
 
-describe('deleteOrphanedSuiteOpWebhook', () => {
+describe('readSuiteOpTokenWebhook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('deletes the SuiteOp webhook once the team has no claimed authorization left', async () => {
+  it('returns the recorded webhook for a SuiteOp token', async () => {
+    const tx = createTx(0, { webhookId: 'webhook-regional' });
+
+    await expect(readSuiteOpTokenWebhook({ tx: tx as never, apiTokenId: 19 })).resolves.toEqual({
+      webhookId: 'webhook-regional',
+    });
+    expect(tx.suiteOpAuthorization.findFirst).toHaveBeenCalledWith({
+      where: { apiTokenId: 19 },
+      select: { webhookId: true },
+    });
+  });
+
+  it('returns null for a token that is not a SuiteOp integration token', async () => {
+    const tx = createTx(0, null);
+
+    await expect(readSuiteOpTokenWebhook({ tx: tx as never, apiTokenId: 19 })).resolves.toBeNull();
+  });
+});
+
+describe('deleteSuiteOpWebhookForToken', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deletes exactly the recorded webhook, scoped to the team', async () => {
+    const tx = createTx();
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-regional' });
+
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'webhook-regional', teamId: 7 },
+    });
+    // A recorded webhook belongs to one integration — no survivor count needed.
+    expect(tx.suiteOpAuthorization.count).not.toHaveBeenCalled();
+  });
+
+  // Authorizations claimed before webhooks were recorded are all on the shared
+  // global URL, which a team's other integrations may still need.
+  it('falls back to the global webhook once no claimed authorization is left', async () => {
     const tx = createTx(0);
 
-    await deleteOrphanedSuiteOpWebhook({ tx: tx as never, teamId: 7 });
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: null });
 
-    expect(tx.suiteOpAuthorization.count).toHaveBeenCalledWith({
-      where: { teamId: 7, claimed: true },
-    });
     expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
       where: { teamId: 7, webhookUrl: GLOBAL_WEBHOOK_URL },
     });
   });
 
-  // The claim flow keeps exactly one webhook per team, so a team that still has
-  // a live SuiteOp connection must keep receiving events.
-  it('keeps the webhook while another claimed authorization survives', async () => {
+  it('keeps the shared global webhook while another claimed authorization survives', async () => {
     const tx = createTx(1);
 
-    await deleteOrphanedSuiteOpWebhook({ tx: tx as never, teamId: 7 });
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: null });
 
     expect(tx.webhook.deleteMany).not.toHaveBeenCalled();
-  });
-
-  it('never touches webhooks belonging to another team', async () => {
-    const tx = createTx(0);
-
-    await deleteOrphanedSuiteOpWebhook({ tx: tx as never, teamId: 42 });
-
-    expect(tx.webhook.deleteMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ teamId: 42 }) }),
-    );
   });
 });
