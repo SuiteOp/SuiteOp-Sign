@@ -650,6 +650,12 @@ export const ZGetTemplatesQuerySchema = z.object({
  */
 export const ZSuiteOpGetCodeRequestSchema = z.object({
   claimCode: z.string(),
+  /**
+   * Regional SuiteOp endpoint to register for this team's document events.
+   * Optional: SuiteOp deployments unreachable from here (local development)
+   * omit it and fall back to the shared global webhook.
+   */
+  webhookUrl: z.string().url().optional(),
 });
 
 export const ZSuiteOpGetCodeResponseSchema = z.object({

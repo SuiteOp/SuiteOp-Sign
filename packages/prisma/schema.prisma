@@ -244,6 +244,7 @@ model SuiteOpAuthorization {
   teamId         Int
   apiTokenId     Int
   plaintextToken String    // Temporary storage of plaintext token until claimed
+  webhookId      String?   // Webhook created for this authorization, deleted with its API token
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   team           Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   apiToken       ApiToken  @relation(fields: [apiTokenId], references: [id], onDelete: Cascade)

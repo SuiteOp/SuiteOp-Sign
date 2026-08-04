@@ -2,12 +2,23 @@ import { prisma } from '@documenso/prisma';
 
 import { GLOBAL_WEBHOOK_EVENTS, GLOBAL_WEBHOOK_URL } from '../../constants/app';
 import { AppError, AppErrorCode } from '../../errors/app-error';
+import { assertAllowedSuiteOpWebhookUrl } from './assert-allowed-webhook-url';
 
 export type ClaimAuthorizationOptions = {
   claimCode: string;
+  /**
+   * Regional SuiteOp endpoint to deliver this team's document events to. When
+   * omitted the shared global webhook is used, which is what SuiteOp
+   * deployments that cannot be reached from here (local development) rely on.
+   */
+  webhookUrl?: string;
 };
 
-export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOptions) => {
+export const claimAuthorization = async ({ claimCode, webhookUrl }: ClaimAuthorizationOptions) => {
+  // Validate before touching the authorization: a bad URL must not consume the
+  // claim code, or the operator has to restart the whole OAuth flow to retry.
+  const targetWebhookUrl = webhookUrl ? assertAllowedSuiteOpWebhookUrl(webhookUrl) : GLOBAL_WEBHOOK_URL;
+
   const authorization = await prisma.suiteOpAuthorization.findUnique({
     where: {
       claimCode,
@@ -48,29 +59,21 @@ export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOption
 
   // Mark as claimed and clear plaintext token, and create webhook in a transaction
   const webhook = await prisma.$transaction(async (tx) => {
-    await tx.suiteOpAuthorization.update({
-      where: {
-        id: authorization.id,
-      },
-      data: {
-        claimed: true,
-        plaintextToken: '',
-      },
-    });
-
     // A team can reconnect after an interrupted callback. Keep exactly one
-    // SuiteOp-managed global webhook instead of accumulating duplicates.
+    // SuiteOp-managed webhook per address instead of accumulating duplicates,
+    // and when SuiteOp supplies its own regional endpoint, retire the global
+    // one — two live subscriptions would double-deliver every event.
     await tx.webhook.deleteMany({
       where: {
         teamId: authorization.teamId,
-        webhookUrl: GLOBAL_WEBHOOK_URL,
+        webhookUrl: { in: [...new Set([targetWebhookUrl, GLOBAL_WEBHOOK_URL])] },
       },
     });
 
     // Create a webhook so SuiteOp receives document events for this team.
-    return await tx.webhook.create({
+    const created = await tx.webhook.create({
       data: {
-        webhookUrl: GLOBAL_WEBHOOK_URL,
+        webhookUrl: targetWebhookUrl,
         eventTriggers: [...GLOBAL_WEBHOOK_EVENTS],
         secret: null,
         enabled: true,
@@ -83,6 +86,21 @@ export const claimAuthorization = async ({ claimCode }: ClaimAuthorizationOption
         eventTriggers: true,
       },
     });
+
+    // Recording the webhook here is what lets revoking this token take the
+    // webhook with it — see `deleteSuiteOpWebhookForToken`.
+    await tx.suiteOpAuthorization.update({
+      where: {
+        id: authorization.id,
+      },
+      data: {
+        claimed: true,
+        plaintextToken: '',
+        webhookId: created.id,
+      },
+    });
+
+    return created;
   });
 
   return {

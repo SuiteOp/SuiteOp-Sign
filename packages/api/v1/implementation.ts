@@ -1662,7 +1662,7 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
   }),
 
   getSuiteOpCode: masterKeyMiddleware(async (args) => {
-    const { claimCode } = args.body;
+    const { claimCode, webhookUrl } = args.body;
 
     const { claimAuthorization } = await import('@documenso/lib/server-only/suiteop/claim-authorization');
     const { getClaimAuthorizationErrorResponse } = await import(
@@ -1670,7 +1670,7 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
     );
 
     try {
-      const result = await claimAuthorization({ claimCode });
+      const result = await claimAuthorization({ claimCode, webhookUrl });
 
       return {
         status: 200,
