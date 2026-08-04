@@ -3,12 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GLOBAL_WEBHOOK_URL } from '../../constants/app';
 import { deleteSuiteOpWebhookForToken, readSuiteOpTokenWebhook } from './delete-orphaned-webhook';
 
-const createTx = (remainingAuthorizations = 0, authorization: { webhookId: string | null } | null = null) => ({
+const REGIONAL_URL = 'https://api-eu.suiteop.com/api/webhooks/documenso/url-token';
+
+const createTx = (
+  remainingAuthorizations = 0,
+  authorization: { webhookId: string | null } | null = null,
+  webhook: { webhookUrl: string } | null = { webhookUrl: REGIONAL_URL },
+) => ({
   suiteOpAuthorization: {
     count: vi.fn().mockResolvedValue(remainingAuthorizations),
     findFirst: vi.fn().mockResolvedValue(authorization),
   },
   webhook: {
+    findFirst: vi.fn().mockResolvedValue(webhook),
     deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
   },
 });
@@ -50,8 +57,37 @@ describe('deleteSuiteOpWebhookForToken', () => {
     expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
       where: { id: 'webhook-regional', teamId: 7 },
     });
-    // A recorded webhook belongs to one integration — no survivor count needed.
+    // A regional endpoint belongs to one integration — no survivor count needed.
     expect(tx.suiteOpAuthorization.count).not.toHaveBeenCalled();
+  });
+
+  // The global address is one row per team, shared by every integration on it
+  // and by the legacy app behind it. Revoking one token must not silence the
+  // rest, even though this authorization recorded that row as its own.
+  it('keeps a recorded global webhook while another SuiteOp integration remains', async () => {
+    const tx = createTx(1, null, { webhookUrl: GLOBAL_WEBHOOK_URL });
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-global' });
+
+    expect(tx.webhook.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes a recorded global webhook once it is the last integration', async () => {
+    const tx = createTx(0, null, { webhookUrl: GLOBAL_WEBHOOK_URL });
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-global' });
+
+    expect(tx.webhook.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'webhook-global', teamId: 7 },
+    });
+  });
+
+  it('does nothing when the recorded webhook is already gone', async () => {
+    const tx = createTx(0, null, null);
+
+    await deleteSuiteOpWebhookForToken({ tx: tx as never, teamId: 7, webhookId: 'webhook-missing' });
+
+    expect(tx.webhook.deleteMany).not.toHaveBeenCalled();
   });
 
   // Authorizations claimed before webhooks were recorded are all on the shared

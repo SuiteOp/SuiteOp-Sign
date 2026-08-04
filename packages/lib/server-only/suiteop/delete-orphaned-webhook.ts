@@ -42,13 +42,41 @@ export const readSuiteOpTokenWebhook = async ({ tx, apiTokenId }: ReadSuiteOpTok
  * it outlives the disconnect and keeps POSTing the team's document events to an
  * integration that no longer exists.
  *
- * Authorizations claimed before webhooks were recorded have no `webhookId`.
- * Those are all on the shared global URL, so they fall back to deleting it —
- * but only once no claimed authorization is left, since that webhook is shared
- * across a team's integrations.
+ * The global webhook is the exception: it is one row per team, shared by every
+ * SuiteOp integration on it and by the legacy app behind that address. Revoking
+ * one token must not silence the others, so it only goes when no claimed
+ * authorization is left — whether or not this authorization recorded it.
+ * Authorizations claimed before webhooks were recorded are all on that URL and
+ * reach the same rule through the fallback.
  */
 export const deleteSuiteOpWebhookForToken = async ({ tx, teamId, webhookId }: DeleteSuiteOpWebhookForTokenOptions) => {
+  const teamHasSuiteOpIntegrationLeft = async () =>
+    (await tx.suiteOpAuthorization.count({
+      where: {
+        teamId,
+        claimed: true,
+      },
+    })) > 0;
+
   if (webhookId) {
+    const webhook = await tx.webhook.findFirst({
+      where: {
+        id: webhookId,
+        teamId,
+      },
+      select: {
+        webhookUrl: true,
+      },
+    });
+
+    if (!webhook) {
+      return;
+    }
+
+    if (webhook.webhookUrl === GLOBAL_WEBHOOK_URL && (await teamHasSuiteOpIntegrationLeft())) {
+      return;
+    }
+
     await tx.webhook.deleteMany({
       where: {
         id: webhookId,
@@ -59,14 +87,7 @@ export const deleteSuiteOpWebhookForToken = async ({ tx, teamId, webhookId }: De
     return;
   }
 
-  const remainingAuthorizations = await tx.suiteOpAuthorization.count({
-    where: {
-      teamId,
-      claimed: true,
-    },
-  });
-
-  if (remainingAuthorizations > 0) {
+  if (await teamHasSuiteOpIntegrationLeft()) {
     return;
   }
 
